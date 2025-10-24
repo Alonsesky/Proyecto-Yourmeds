@@ -2,9 +2,11 @@ package com.backend.yourmeds.entity;
 
 import com.backend.yourmeds.entity.id.UserRoleId;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "user_role")
 public class UserHasRoles {

@@ -1,23 +1,21 @@
 package com.backend.yourmeds.service;
 
+import com.backend.yourmeds.dto.alarm.AlarmSummaryDto;
+import com.backend.yourmeds.dto.alarm.UserOverviewDto;
+import com.backend.yourmeds.dto.group.GroupMemberDto;
 import com.backend.yourmeds.dto.role.RoleDto;
-import com.backend.yourmeds.dto.user.CreateUserRequestDto;
-import com.backend.yourmeds.dto.user.CreateUserResponseDto;
-import com.backend.yourmeds.dto.user.LoginRequestDto;
-import com.backend.yourmeds.dto.user.LoginResponseDto;
-import com.backend.yourmeds.entity.Role;
-import com.backend.yourmeds.entity.User;
-import com.backend.yourmeds.entity.UserHasRoles;
-import com.backend.yourmeds.repository.RoleRepository;
-import com.backend.yourmeds.repository.UserHasRolesRepository;
-import com.backend.yourmeds.repository.UserRepository;
+import com.backend.yourmeds.dto.user.*;
+import com.backend.yourmeds.entity.*;
+import com.backend.yourmeds.repository.*;
 import com.backend.yourmeds.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class UserService {
@@ -36,6 +34,12 @@ public class UserService {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    GroupHasUserRepository groupHasUserRepository;
+
+    @Autowired
+    AlarmRepository alarmRepository;
 
     @Transactional
     public CreateUserResponseDto createUser(CreateUserRequestDto createUserRequestDto){
@@ -136,4 +140,63 @@ public class UserService {
 
         return createUserResponseDto;
     }
+
+    // METODOS ESPECIFICOS PARA LISTAR MIEMBROS DE GRUPOS
+    public UserOverviewDto getOverview(Long userId){
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found with id: " + userId));
+
+        List<GroupHasUser> memberships = groupHasUserRepository.findByUser_Id(userId);
+
+        UserOverviewDto root = new UserOverviewDto();
+        root.setUserId(u.getId());
+        root.setName(u.getName());
+
+        List<UserGroupDto> groups = memberships.stream().map(m -> {
+            var g = m.getGroup();
+
+            UserGroupDto gDto = new UserGroupDto();
+            gDto.setGroupId(g.getId());
+            gDto.setName(g.getName());
+            gDto.setPrivate(g.isPrivate());
+            gDto.setOwner(m.isOwner());
+
+            // miembros del grupo
+            List<GroupMemberDto> members = groupHasUserRepository.findByGroup_Id(g.getId())
+                    .stream().map(gu -> {
+                        GroupMemberDto d = new GroupMemberDto();
+                        d.setId(gu.getUser().getId());
+                        d.setName(gu.getUser().getName());
+                        d.setOwner(gu.isOwner());
+                        return d;
+                    }).toList();
+            gDto.setUsers(members);
+
+            // alarmas del grupo
+            List<AlarmSummaryDto> alarms = alarmRepository.findByGroup_IdOrderByDateStartAsc(g.getId())
+                    .stream().map(this::toAlarmSummary).toList();
+            gDto.setAlarms(alarms);
+
+            return gDto;
+        }).toList();
+
+        root.setGroups(groups);
+        return root;
+    }
+
+    // METODO PARA OBTENER ID DEL USUARIO
+    public Long getCurrentUserIdByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .map(User::getId)
+                .orElseThrow(() -> new RuntimeException("Información email no encontrada"));
+    }
+
+    private AlarmSummaryDto toAlarmSummary(Alarm a){
+        AlarmSummaryDto d = new AlarmSummaryDto();
+        d.setId(a.getId());
+        d.setName(a.getName());
+        d.setDateStart(a.getDateStart());
+        return d;
+    }
 }
+
