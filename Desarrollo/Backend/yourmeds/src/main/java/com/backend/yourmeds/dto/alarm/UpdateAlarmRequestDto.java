@@ -1,14 +1,15 @@
 package com.backend.yourmeds.dto.alarm;
 
-import java.util.Date;
+import java.time.LocalDate;
+
 
 public class UpdateAlarmRequestDto {
     public String name;
-    public Boolean alarmType;
+    public Boolean alarm_type;
     public Boolean active;
     public Integer cant;
-    public Date dateStart;
-    public Date dateEnd;
+    public LocalDate date_start;
+    public LocalDate date_end;
     public String description;
-    public Long groupId; // permitir mover la alarma a otro grupo
+    public Long groupId;
 }
