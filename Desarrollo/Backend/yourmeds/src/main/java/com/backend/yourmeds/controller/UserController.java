@@ -8,9 +8,11 @@ import com.backend.yourmeds.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("api/v1/user")
@@ -38,4 +40,30 @@ public class UserController {
             ));
         }
     }
+
+    // METODO PARA OBTENER TODA LA INFO DE UN USUARIO CON SUS GRUPOS Y ALARMAS
+    @GetMapping("/{id}/overview")
+    public ResponseEntity<?> overview(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(userService.getOverview(id));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(
+                    java.util.Map.of("message", e.getMessage(), "statusCode", 404)
+            );
+        }
+    }
+
+    @GetMapping("/me/id")
+    public ResponseEntity<Object> myId(Authentication authentication) {
+        try {
+            String email = authentication.getName();
+            Long id = userService.getCurrentUserIdByEmail(email);
+            return ResponseEntity.ok(id);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", e.getMessage(), "statusCode", 404));
+        }
+    }
+
+
 }
