@@ -5,7 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -37,7 +39,7 @@ public class Group {
 
     // Atributo relacion con User
     @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<GroupHasUser> users = new HashSet<>();
+    private List<GroupHasUser> members = new ArrayList<>();
 
     //Atributo relacion con Alarm
     @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)

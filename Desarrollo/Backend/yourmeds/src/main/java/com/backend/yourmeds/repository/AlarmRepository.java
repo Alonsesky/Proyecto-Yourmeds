@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface AlarmRepository extends JpaRepository<Alarm, Long> {
     List<Alarm> findByGroup_IdOrderByDateStartAsc(Long groupId);
+    List<Alarm> findByGroup_Id(Long groupId);
 }

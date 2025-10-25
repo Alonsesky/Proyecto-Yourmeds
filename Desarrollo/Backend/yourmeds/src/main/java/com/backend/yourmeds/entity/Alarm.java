@@ -32,10 +32,10 @@ public class Alarm {
     int cant;
 
     @Column(nullable = false)
-    Date dateStart;
+    LocalDate dateStart;
 
     @Column(nullable = false)
-    Date dateEnd;
+    LocalDate dateEnd;
 
     String description;
 
@@ -52,7 +52,7 @@ public class Alarm {
     public Alarm() {
     }
 
-    public Alarm(Long id, String name, boolean alarmType, boolean active, int cant, Date dateStart, Date dateEnd, String description, ZonedDateTime timestamp) {
+    public Alarm(Long id, String name, boolean alarmType, boolean active, int cant, LocalDate dateStart, LocalDate dateEnd, String description, ZonedDateTime timestamp) {
         this.id = id;
         this.name = name;
         this.alarmType = alarmType;

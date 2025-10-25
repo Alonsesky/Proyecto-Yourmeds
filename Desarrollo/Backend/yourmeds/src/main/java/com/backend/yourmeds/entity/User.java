@@ -8,10 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 @Getter
 @Setter
@@ -56,7 +53,7 @@ public class User implements UserDetails {
     private Set<UserHasRoles> roles = new HashSet<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<GroupHasUser> groups = new HashSet<>();
+    private List<GroupHasUser> groups = new ArrayList<>();
 
     // Constructor
     public User() {

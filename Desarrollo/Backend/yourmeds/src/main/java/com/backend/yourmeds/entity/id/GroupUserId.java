@@ -18,24 +18,22 @@ public class GroupUserId implements Serializable {
     private Long userId;
 
     @Override
-    public boolean equals(Object object){
-        if (this == object) return true;
-        if (!(object instanceof UserRoleId)) return  false;
-        GroupUserId groupUserId = (GroupUserId) object;
-        return Objects.equals(groupId,groupUserId.groupId) && Objects.equals(userId, groupUserId.userId);
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof GroupUserId)) return false;
+        GroupUserId that = (GroupUserId) o;
+        return Objects.equals(groupId, that.groupId) &&
+                Objects.equals(userId, that.userId);
     }
 
     @Override
-    public int hashCode(){
-        return  Objects.hash(groupId,userId);
+    public int hashCode() {
+        return Objects.hash(groupId, userId);
     }
 
-    public GroupUserId() {
-    }
-
+    public GroupUserId() {}
     public GroupUserId(Long groupId, Long userId) {
         this.groupId = groupId;
         this.userId = userId;
     }
-
 }

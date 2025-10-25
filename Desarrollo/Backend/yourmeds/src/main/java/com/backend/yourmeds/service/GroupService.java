@@ -8,9 +8,12 @@ import com.backend.yourmeds.entity.id.GroupUserId;
 import com.backend.yourmeds.repository.GroupHasUserRepository;
 import com.backend.yourmeds.repository.GroupRepository;
 import com.backend.yourmeds.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -24,27 +27,66 @@ public class GroupService {
     @Autowired
     private GroupHasUserRepository groupHasUserRepository;
 
-    private GroupResponseDto toResponse(Group entity){
+    private GroupResponseDto toResponse(Group entity, boolean isOwner) {
         GroupResponseDto dto = new GroupResponseDto();
         dto.setId(entity.getId());
         dto.setName(entity.getName());
         dto.setDescription(entity.getDescription());
+
+        dto.setCant_users(entity.getCantUsers());
+        dto.setIs_private(entity.isPrivate());
+        dto.setCreate_at(entity.getCreatedAt());
+        dto.setUpdated_at(entity.getUpdatedAt());
+        dto.setIsOwner(isOwner);
         return dto;
     }
 
-    public GroupResponseDto create(CreateGroupRequestDto request){
-        Group group = new Group();
-        group.setName(request.name);
-        group.setDescription(request.description);
-        group.setPrivate(request.is_private);
-        Group saved = groupRepository.save(group);
-        return toResponse(saved);
+    @Transactional
+    public GroupResponseDto create(CreateGroupRequestDto req) {
+        // 1) Usuario actual (dueño)
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User owner = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado"));
+
+        // 2) Crear y guardar el grupo
+        Group g = new Group();
+        g.setName(req.name);
+        g.setCantUsers(req.cant_users);
+        g.setDescription(req.description);
+        g.setPrivate(req.is_private);
+        g.setCreatedAt(LocalDateTime.now());
+        Group saved = groupRepository.save(g);
+
+        // 3) Crear el vínculo en la tabla intermedia como propietario
+        GroupUserId id = new GroupUserId(saved.getId(), owner.getId()); // (groupId, userId)
+        GroupHasUser link = new GroupHasUser();
+        link.setId(id);
+        link.setUser(owner);
+        link.setGroup(saved);
+        link.setOwner(true);
+
+        groupHasUserRepository.save(link);
+
+        // 4) Devolver respuesta
+        return toResponse(saved, true);
     }
 
     public GroupResponseDto findById(Long id){
         Group group = groupRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Group not found with id: " + id));
-        return toResponse(group);
+
+        // calcular isOwner para el usuario autenticado
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long userId = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado"))
+                .getId();
+
+        boolean isOwner = groupHasUserRepository
+                .findById(new GroupUserId(id, userId))
+                .map(GroupHasUser::isOwner)
+                .orElse(false);
+
+        return toResponse(group, isOwner);
     }
 
     public GroupResponseDto update(Long id, UpdateGroupRequestDto request){
@@ -53,9 +95,24 @@ public class GroupService {
 
         if (request.name != null) group.setName(request.name);
         if (request.description != null) group.setDescription(request.description);
+        if (request.cant_users != null) group.setCantUsers(request.cant_users);
+        if (request.is_private != null) group.setPrivate(request.is_private);
 
+        group.setUpdatedAt(LocalDateTime.now());
         Group saved = groupRepository.save(group);
-        return toResponse(saved);
+
+        // calcular isOwner del actual para la respuesta
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long userId = userRepository.findByEmail(email)
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado"))
+                .getId();
+
+        boolean isOwner = groupHasUserRepository
+                .findById(new GroupUserId(id, userId))
+                .map(GroupHasUser::isOwner)
+                .orElse(false);
+
+        return toResponse(saved, isOwner);
     }
 
     public void delete(Long id){
@@ -63,7 +120,8 @@ public class GroupService {
                 .orElseThrow(() -> new NoSuchElementException("Group not found with id: " + id));
         groupRepository.delete(group);
     }
-    // METODOS PARA MIEMBROS
+
+    // ========== MIEMBROS ==========
     public List<GroupMemberDto> listMembers(Long groupId) {
         groupRepository.findById(groupId)
                 .orElseThrow(() -> new NoSuchElementException("Group not found with id: " + groupId));
@@ -82,16 +140,18 @@ public class GroupService {
         for (String email : body.userEmails) {
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new NoSuchElementException("User not found with email: " + email));
+
             if (groupHasUserRepository.existsById_GroupIdAndId_UserId(groupId, user.getId())) {
-                // si prefieres ignorar en vez de error, comenta esta línea y continúa
                 throw new IllegalStateException("User already in group: " + email);
             }
+
             boolean owner = (body.ownerEmail != null && body.ownerEmail.equalsIgnoreCase(email));
+
             GroupHasUser link = new GroupHasUser();
             link.setGroup(group);
             link.setUser(user);
             link.setOwner(owner);
-            link.setId(new GroupUserId(group.getId(), user.getId()));
+            link.setId(new GroupUserId(group.getId(), user.getId())); // (groupId, userId)
             groupHasUserRepository.save(link);
         }
         return listMembers(groupId);
@@ -100,14 +160,16 @@ public class GroupService {
     public void removeMember(Long groupId, Long userId) {
         GroupUserId id = new GroupUserId(groupId, userId);
         GroupHasUser link = groupHasUserRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Membership not found (groupId=" + groupId + ", userId=" + userId + ")"));
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Membership not found (groupId=" + groupId + ", userId=" + userId + ")"));
         groupHasUserRepository.delete(link);
     }
 
     public List<GroupMemberDto> setOwnerFlag(Long groupId, Long userId, boolean isOwner) {
         GroupUserId id = new GroupUserId(groupId, userId);
         GroupHasUser link = groupHasUserRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Membership not found (groupId=" + groupId + ", userId=" + userId + ")"));
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Membership not found (groupId=" + groupId + ", userId=" + userId + ")"));
         link.setOwner(isOwner);
         groupHasUserRepository.save(link);
         return listMembers(groupId);

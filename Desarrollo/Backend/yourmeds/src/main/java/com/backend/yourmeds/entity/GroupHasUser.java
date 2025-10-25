@@ -12,18 +12,17 @@ import lombok.Setter;
 public class GroupHasUser {
 
     @EmbeddedId
-    private GroupUserId id = new GroupUserId();
+    private GroupUserId id;
 
-    @ManyToOne
-    @MapsId("groupId")
-    @JoinColumn(name = "id_group")
-    private Group group;
-
-    @ManyToOne
-    @MapsId("userId")
+    @ManyToOne(fetch = FetchType.LAZY) @MapsId("userId")
     @JoinColumn(name = "id_user")
     private User user;
 
+    @ManyToOne(fetch = FetchType.LAZY) @MapsId("groupId")
+    @JoinColumn(name = "id_group")
+    private Group group;
+
+    @Column(name = "isOwner", nullable = false)
     private boolean isOwner;
 
     public GroupHasUser() {
