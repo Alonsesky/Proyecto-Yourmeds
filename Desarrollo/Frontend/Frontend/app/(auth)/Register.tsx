@@ -1,4 +1,3 @@
-// components/RegisterSheet.tsx
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert } from 'react-native';
@@ -13,16 +12,6 @@ import { register } from '../services/auth';
 /* ===== Tipos expuestos al padre ===== */
 export type RegisterSheetRef = { open: () => void; close: () => void };
 
-// 🔹 ahora el formulario incluye rut y age
-type RegisterForm = {
-  name: string;
-  email: string;
-  password: string;
-  confirm: string;
-  rut: string;   // guardamos SOLO dígitos (sin puntos ni guion)
-  age: number;
-};
-
 /* ===== Helpers RUT ===== */
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
 const formatRut = (digits: string) => {
@@ -31,14 +20,25 @@ const formatRut = (digits: string) => {
   if (d.length <= 1) return d;
   const cuerpo = d.slice(0, -1);
   const dv = d.slice(-1);
-  // poner puntos cada 3 desde el final del cuerpo
   const cuerpoFmt = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${cuerpoFmt}-${dv}`;
+};
+
+/* ===== Formulario ===== */
+type RegisterForm = {
+  name: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirm: string;
+  rut: string;   // lo guardamos como dígitos en el submit
+  age: number;
 };
 
 /* ===== Validación ===== */
 const registerSchema = yup.object({
   name: yup.string().min(2, 'Nombre muy corto').required('El nombre es obligatorio'),
+  lastName: yup.string().min(2, 'Apellido muy corto').required('El apellido es obligatorio'),
   email: yup.string().email('Correo inválido').required('El correo es obligatorio'),
   password: yup
     .string()
@@ -50,13 +50,11 @@ const registerSchema = yup.object({
     .string()
     .oneOf([yup.ref('password')], 'Las contraseñas no coinciden')
     .required('Confirma tu contraseña'),
-  // 🔹 RUT: 8–9 dígitos, requerido
   rut: yup
     .string()
     .transform((v) => onlyDigits(v))
     .matches(/^\d{8,9}$/, 'RUT inválido')
     .required('El RUT es obligatorio'),
-  // 🔹 Edad: 16–99
   age: yup
     .number()
     .typeError('Ingresa una edad válida')
@@ -66,7 +64,7 @@ const registerSchema = yup.object({
     .required('La edad es obligatoria'),
 });
 
-/* ===== Fuerza de contraseña ===== */
+/* ===== Fuerza de contraseña (visual) ===== */
 function calcStrength(pwd: string) {
   let score = 0;
   if (!pwd) return { score, label: 'Muy débil', color: '#FF6B6B' };
@@ -102,17 +100,26 @@ const RegisterSheet = forwardRef<RegisterSheetRef, Props>(({ onRegistered }, ref
   } = useForm<RegisterForm>({
     resolver: yupResolver(registerSchema),
     mode: 'onChange',
-    defaultValues: { age: undefined as any }, // permite campo vacío inicialmente
+    defaultValues: { age: undefined as unknown as number }, // permite campo vacío inicialmente
   });
 
   const pwd = watch('password') || '';
   const strength = useMemo(() => calcStrength(pwd), [pwd]);
 
-  const onRegister = async ({ name, email, password, rut, age }: RegisterForm) => {
+  const onRegister = async ({ name, lastName, email, password, rut, age }: RegisterForm) => {
     try {
       setLoadingReg(true);
-      // Por ahora MANTENEMOS el contrato actual:
-      await register({ email, password });
+
+      // Enviar exactamente lo que tu backend espera en /api/v1/auth/register
+      await register({
+        name,
+        lastName,
+        email,
+        password,
+        rut: onlyDigits(rut), // solo dígitos
+        age: Number(age),
+      });
+
       Alert.alert('Cuenta creada', 'Ya puedes iniciar sesión.');
       sheetRef.current?.close();
       onRegistered?.();
@@ -162,6 +169,24 @@ const RegisterSheet = forwardRef<RegisterSheetRef, Props>(({ onRegistered }, ref
           )}
         />
         {errors.name && <ErrorMsgLight>{errors.name.message}</ErrorMsgLight>}
+
+        {/* Apellido */}
+        <LabelLight>Apellido</LabelLight>
+        <Controller
+          control={control}
+          name="lastName"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <InputLight
+              placeholder="Ingrese Apellido"
+              placeholderTextColor="#E6F4FF"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              style={{ borderBottomColor: errors.lastName ? '#FFD1D1' : 'rgba(255,255,255,0.7)' }}
+            />
+          )}
+        />
+        {errors.lastName && <ErrorMsgLight>{errors.lastName.message}</ErrorMsgLight>}
 
         {/* Correo */}
         <LabelLight>Correo</LabelLight>
@@ -270,7 +295,7 @@ const RegisterSheet = forwardRef<RegisterSheetRef, Props>(({ onRegistered }, ref
               value={value !== undefined && value !== null ? String(value) : ''}
               onChangeText={(t) => {
                 const dig = onlyDigits(t);
-                onChange(dig ? Number(dig) : ('' as any));
+                onChange(dig ? Number(dig) : ('' as unknown as number));
               }}
               onBlur={onBlur}
               style={{ borderBottomColor: errors.age ? '#FFD1D1' : 'rgba(255,255,255,0.7)' }}

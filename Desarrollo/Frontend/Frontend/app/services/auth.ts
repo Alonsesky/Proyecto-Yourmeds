@@ -1,14 +1,17 @@
 import { http } from "./http";
 import { saveToken } from "./storage";
 
-// CONSTANTES QUE SE UTILIZA EN LOS DIFERENTES METODOS
+/* === ENDPOINTS === */
 const LOGIN_PATH = "/api/v1/auth/login";
+const REGISTER_PATH = "/api/v1/auth/register";
 
-// METODO PARA LOGUEAR A UN USUARIO
+/* === LOGIN === */
 export async function login(payload: { email: string; password: string }) {
-  const data = await http(LOGIN_PATH, { method: "POST", body: JSON.stringify(payload) });
+  const data = await http(LOGIN_PATH, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 
-  // Guarda el token tal cual venga: "Bearer <jwt>" o "<jwt>"
   const token =
     (data as any).token ??
     (data as any).access_token ??
@@ -17,21 +20,23 @@ export async function login(payload: { email: string; password: string }) {
   if (!token) throw new Error("No se recibió token.");
 
   await saveToken(String(token).trim());
-  return String(token).trim();
+  return data; 
 }
 
-// METODO PARA REGISTRAR AL USUARIO
-export async function register(payload: { email: string; password: string }) {
-  const data = await http(LOGIN_PATH, { method: "POST", body: JSON.stringify(payload) });
+/* === REGISTER === */
+export type RegisterBody = {
+  email: string;
+  password: string;
+  name: string;
+  lastName: string;
+  rut: string; 
+  age: number;
+};
 
-  // Guarda el token tal cual venga: "Bearer <jwt>" o "<jwt>"
-  const token =
-    (data as any).token ??
-    (data as any).access_token ??
-    (data as any).jwt;
-
-  if (!token) throw new Error("No se recibió token.");
-
-  await saveToken(String(token).trim());
-  return String(token).trim();
+export async function register(payload: RegisterBody) {
+  const data = await http(REGISTER_PATH, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return data;
 }
