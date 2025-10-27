@@ -38,6 +38,7 @@ public class AlarmService {
                 .alarm_type(a.isAlarmType())
                 .active(a.isActive())
                 .cant(a.getCant())
+                .time_alarm(a.getTimeAlarm())
                 .date_start(a.getDateStart())
                 .date_end(a.getDateEnd())
                 .description(a.getDescription())
@@ -73,6 +74,7 @@ public class AlarmService {
         a.setAlarmType(req.alarm_type);
         a.setActive(req.active);
         a.setCant(req.cant);
+        a.setTimeAlarm(req.time_alarm);
         a.setDateStart(req.date_start);
         a.setDateEnd(req.date_end);
         a.setDescription(req.description);
@@ -101,6 +103,7 @@ public class AlarmService {
         if (req.alarm_type != null) a.setAlarmType(req.alarm_type);
         if (req.active != null) a.setActive(req.active);
         if (req.cant != null) a.setCant(req.cant);
+        if (req.time_alarm != null) a.setTimeAlarm(req.time_alarm);
         if (req.date_start != null) a.setDateStart(req.date_start);
         if (req.date_end != null) a.setDateEnd(req.date_end);
         if (req.description != null) a.setDescription(req.description);

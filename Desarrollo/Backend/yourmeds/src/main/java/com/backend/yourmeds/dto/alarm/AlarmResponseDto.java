@@ -6,8 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
-import java.util.Date;
 
 @Builder
 @AllArgsConstructor
@@ -19,6 +19,7 @@ public class AlarmResponseDto {
     private boolean alarm_type;
     private boolean active;
     private Integer cant;
+    private LocalTime time_alarm;
     private LocalDate date_start;
     private LocalDate date_end;
     private String description;

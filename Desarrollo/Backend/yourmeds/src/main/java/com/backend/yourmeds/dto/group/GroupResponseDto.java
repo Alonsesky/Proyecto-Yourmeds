@@ -17,7 +17,6 @@ public class GroupResponseDto {
     private Long id;
     private String name;
     private Integer cant_users;
-    private String description;
     private Boolean is_private;
     private LocalDateTime create_at;
     private LocalDateTime updated_at;
@@ -28,7 +27,6 @@ public class GroupResponseDto {
                 .id(g.getId())
                 .name(g.getName())
                 .cant_users(g.getCantUsers())
-                .description(g.getDescription())
                 .is_private(g.isPrivate())
                 .create_at(g.getCreatedAt())
                 .updated_at(g.getUpdatedAt())
