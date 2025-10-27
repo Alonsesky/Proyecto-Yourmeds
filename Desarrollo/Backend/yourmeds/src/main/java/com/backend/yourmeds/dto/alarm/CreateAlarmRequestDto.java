@@ -2,7 +2,7 @@ package com.backend.yourmeds.dto.alarm;
 
 
 import java.time.LocalDate;
-import java.util.Date;
+import java.time.LocalTime;
 
 public class CreateAlarmRequestDto {
 
@@ -15,8 +15,9 @@ public class CreateAlarmRequestDto {
 
     public Integer cant;
 
-    public LocalDate date_start;
+    public LocalTime time_alarm;
 
+    public LocalDate date_start;
 
     public LocalDate date_end;
 

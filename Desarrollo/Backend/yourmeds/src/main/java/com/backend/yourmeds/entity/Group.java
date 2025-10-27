@@ -25,8 +25,6 @@ public class Group {
     @Column(name = "cant_users")
     int cantUsers;
 
-    String description;
-
     @Column(name = "is_private")
     private boolean isPrivate;
 
