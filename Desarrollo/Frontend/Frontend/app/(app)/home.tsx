@@ -87,8 +87,7 @@ export default function Home() {
     if (type === 'alarm') {
       router.push('../(alarm)/alarm');
     } else {
-      // TODO: navegar/abrir crear grupo
-      // router.push('/groups/new')
+      router.push('../(group)/group');
     }
   };
 
