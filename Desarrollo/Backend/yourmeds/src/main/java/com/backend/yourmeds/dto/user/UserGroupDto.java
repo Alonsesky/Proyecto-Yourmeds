@@ -11,7 +11,8 @@ public class UserGroupDto {
     private Long groupId;
     private String name;
     private boolean isPrivate;
-    private boolean isOwner; // si el usuario consultado es owner en ese grupo
+    private boolean isOwner;
+    private String color;
     private List<GroupMemberDto> users;
     private List<AlarmSummaryDto> alarms;
 }

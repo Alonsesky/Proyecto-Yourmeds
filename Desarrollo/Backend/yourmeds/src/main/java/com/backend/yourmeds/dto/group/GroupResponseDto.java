@@ -21,6 +21,7 @@ public class GroupResponseDto {
     private LocalDateTime create_at;
     private LocalDateTime updated_at;
     private Boolean isOwner;
+    private String color;
 
     public static GroupResponseDto from(Group g, boolean isOwner) {
         return GroupResponseDto.builder()
@@ -31,6 +32,7 @@ public class GroupResponseDto {
                 .create_at(g.getCreatedAt())
                 .updated_at(g.getUpdatedAt())
                 .isOwner(isOwner)
+                .color(g.getColor())
                 .build();
     }
 }
