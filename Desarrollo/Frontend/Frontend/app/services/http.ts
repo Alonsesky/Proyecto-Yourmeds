@@ -3,7 +3,7 @@ import { getToken } from "./storage";
 
 const API_URL =
   Platform.OS === "android" ? "http://10.0.2.2:8080" :
-  Platform.OS === "ios"     ? "http://localhost:8080" : "http://192.168.0.117:8080";
+  Platform.OS === "ios"     ? "http://localhost:8080" : "http://192.168.18.15:8080";
 
 type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 

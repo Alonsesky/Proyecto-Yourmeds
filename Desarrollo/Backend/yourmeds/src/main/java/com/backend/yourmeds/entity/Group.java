@@ -35,6 +35,8 @@ public class Group {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
+    private String color;
+
     // Atributo relacion con User
     @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GroupHasUser> members = new ArrayList<>();

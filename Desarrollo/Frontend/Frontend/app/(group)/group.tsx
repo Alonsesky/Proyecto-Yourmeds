@@ -27,6 +27,8 @@ export default function NewGroupScreen() {
     const handleDelete = (id: string) =>
       setUsers((arr) => arr.filter((u) => u.id !== id));
     
+    
+
   return (
     <Screen>
       <Safe style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
