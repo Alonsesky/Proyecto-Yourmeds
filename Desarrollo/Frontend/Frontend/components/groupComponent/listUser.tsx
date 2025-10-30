@@ -1,7 +1,6 @@
-// components/ListUsers.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { FlatList, ListRenderItem } from 'react-native';
+import { FlatList, ListRenderItem, Platform } from 'react-native';
 import styled from 'styled-components/native';
 
 const BLUE = '#0693E9';
@@ -21,27 +20,36 @@ type Props = {
   marginTop?: number;        // separación con el bloque anterior
   items: UserRow[];
   onDelete?: (id: string) => void;
-  onPressRow?: (id: string) => void; // opcional para futuro (cambiar rol, etc.)
+  onPressRow?: (id: string) => void; // opcional para futuro
 };
 
 export default function ListUsers({
   label = 'LISTA DE USUARIOS',
-  inset = 21,
-  marginTop = 16,
+  inset = 2,
+  marginTop = 4,
   items,
   onDelete,
   onPressRow,
 }: Props) {
   const renderItem: ListRenderItem<UserRow> = ({ item }) => (
-    <RowButton activeOpacity={onPressRow ? 0.85 : 1} onPress={() => onPressRow?.(item.id)}>
+    <RowButton
+      activeOpacity={onPressRow ? 0.85 : 1}
+      onPress={() => onPressRow?.(item.id)}
+    >
       {/* email */}
-      <CellEmail numberOfLines={1}>{item.email}</CellEmail>
+      <EmailWrap>
+        <CellEmail numberOfLines={1} ellipsizeMode="middle">
+          {item.email}
+        </CellEmail>
+      </EmailWrap>
 
       {/* separador */}
       <DividerVert />
 
       {/* role */}
-      <CellRole>{item.role === 'editor' ? 'Editor' : 'Lector'}</CellRole>
+      <RoleWrap>
+        <CellRole>{item.role === 'editor' ? 'Editor' : 'Lector'}</CellRole>
+      </RoleWrap>
 
       {/* botón eliminar */}
       <DeleteBtn onPress={() => onDelete?.(item.id)} activeOpacity={0.9}>
@@ -64,7 +72,7 @@ export default function ListUsers({
           data={items}
           keyExtractor={(it) => it.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 12 }}
+          contentContainerStyle={{ padding: 1 }}  
           ItemSeparatorComponent={() => <Sep />}
           keyboardShouldPersistTaps="handled"
         />
@@ -91,35 +99,53 @@ const Panel = styled.View({
   minHeight: 160,
 });
 
-/* fila “chip” blanca */
+/* fila “chip” blanca – estilo clásico */
 const RowButton = styled.TouchableOpacity({
   flexDirection: 'row',
   alignItems: 'center',
   backgroundColor: WHITE,
   borderRadius: 16,
-  paddingVertical: 6,
+  paddingVertical: 4,      // ← padding vertical (no height fija)
   paddingLeft: 12,
-  paddingRight: 46, // deja espacio al círculo derecho
+  paddingRight: 40,        // deja espacio al círculo derecho
   position: 'relative',
+  width: '100%',
+  alignSelf: 'stretch',
+});
+
+const EmailWrap = styled.View({
+  flex: 1.4,
+  justifyContent: 'center',
+  minWidth: 0,             // permite que el texto se encoja
+});
+
+const RoleWrap = styled.View({
+  flex: 0.7,
+  justifyContent: 'center',
+  minWidth: 0,
 });
 
 const CellEmail = styled.Text({
-  flex: 1.4,
   color: BLUE,
   fontWeight: '800',
+  fontSize: 14,                                    
+  lineHeight: Platform.select({ web: 18, default: 18 }),
+  includeFontPadding: false as any,
 });
 
 const DividerVert = styled.View({
   width: 1,
-  height: 18,
+  height: 20,                                       
   backgroundColor: 'rgba(6,147,233,0.35)',
   marginHorizontal: 10,
 });
 
 const CellRole = styled.Text({
-  flex: 0.7,
   color: BLUE,
   fontWeight: '800',
+  fontSize: 13,
+  lineHeight: Platform.select({ web: 16, default: 16 }),
+  includeFontPadding: false as any,
   textAlign: 'left',
 });
 
@@ -130,11 +156,14 @@ const DeleteBtn = styled.TouchableOpacity({
   paddingVertical: 6,
   paddingHorizontal: 12,
   marginLeft: 8,
+  alignItems: 'center',
+  justifyContent: 'center',
 });
 const DeleteText = styled.Text({
   color: WHITE,
   fontWeight: '900',
   fontSize: 12,
+  includeFontPadding: false as any,
 });
 
 const RightCircle = styled.View({
