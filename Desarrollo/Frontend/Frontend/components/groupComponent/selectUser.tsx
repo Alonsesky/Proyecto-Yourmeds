@@ -10,40 +10,44 @@ const WHITE = '#FFFFFF';
 export type GroupRole = 'editor' | 'lector';
 
 type Props = {
-  inset?: number;               // margen horizontal externo
-  label?: string;               // título encima (por defecto "AGREGAR USUARIO")
-
-  // Controlado (opcional): si no los pasas, el comp mantiene estado interno
-  email?: string;
-  role?: GroupRole;
-
-  // Callbacks (opcionales por ahora)
+  inset?: number;                // margen horizontal externo
+  label?: string;                // "AGREGAR USUARIO"
+  email?: string;                // controlado opcional
+  role?: GroupRole;              // controlado opcional
+  showRole?: boolean;            // ← mostrar/ocultar el picker de rol
   onEmailChange?: (v: string) => void;
   onRoleChange?: (r: GroupRole) => void;
-  onAddPress?: () => void;      // click del botón circular
+  onAddPress?: () => void;
 };
 
 export default function SelectUser({
   inset = 21,
   label = 'AGREGAR USUARIO',
   email: emailProp,
-  role: roleProp,
+  role: roleProp = 'lector',
+  showRole = true,
   onEmailChange,
   onRoleChange,
   onAddPress,
 }: Props) {
-  // Estado interno si no vienen controlados
+  // Estados internos cuando no vienen controlados
   const [email, setEmail] = React.useState(emailProp ?? '');
-  const [role, setRole] = React.useState<GroupRole>(roleProp ?? 'editor');
+  const [role, setRole] = React.useState<GroupRole>(roleProp);
 
-  // Sync si cambian desde afuera
-  React.useEffect(() => { if (emailProp !== undefined) setEmail(emailProp); }, [emailProp]);
-  React.useEffect(() => { if (roleProp  !== undefined) setRole(roleProp);   }, [roleProp]);
+  // Sincroniza si cambian desde afuera
+  React.useEffect(() => {
+    if (emailProp !== undefined) setEmail(emailProp);
+  }, [emailProp]);
+
+  React.useEffect(() => {
+    setRole(roleProp);
+  }, [roleProp]);
 
   const changeEmail = (v: string) => {
     setEmail(v);
     onEmailChange?.(v);
   };
+
   const changeRole = (v: GroupRole) => {
     setRole(v);
     onRoleChange?.(v);
@@ -66,22 +70,24 @@ export default function SelectUser({
           />
         </Pill>
 
-        {/* Rol */}
-        <RolePill>
-          <PickerStyled
-            selectedValue={role}
-            onValueChange={(v) => changeRole(v as GroupRole)}
-            dropdownIconColor={WHITE}
-          >
-            <Picker.Item label="Editor" value="editor" />
-            <Picker.Item label="Lector" value="lector" />
-          </PickerStyled>
-          <Chevron>
-            <Ionicons name="chevron-down" size={16} color={WHITE} />
-          </Chevron>
-        </RolePill>
+        {/* Rol (se puede ocultar con showRole) */}
+        {showRole && (
+          <RolePill>
+            <PickerStyled
+              selectedValue={role}
+              onValueChange={(v) => changeRole(v as GroupRole)}
+              dropdownIconColor={WHITE}
+            >
+              <Picker.Item label="Editor" value="editor" />
+              <Picker.Item label="Lector" value="lector" />
+            </PickerStyled>
+            <Chevron>
+              <Ionicons name="chevron-down" size={16} color={WHITE} />
+            </Chevron>
+          </RolePill>
+        )}
 
-        {/* Botón agregar (solo UI) */}
+        {/* Botón agregar */}
         <CircleBtn onPress={onAddPress} activeOpacity={0.9}>
           <Ionicons name="person-add" size={20} color={BLUE} />
         </CircleBtn>
@@ -124,7 +130,6 @@ const EmailInput = styled.TextInput({
   paddingVertical: 6,
 });
 
-/* --- Role pill con Picker embebido --- */
 const RolePill = styled.View({
   backgroundColor: BLUE,
   borderRadius: 18,
@@ -150,7 +155,6 @@ const Chevron = styled.View({
   justifyContent: 'center',
 });
 
-/* Botón circular agregar */
 const CircleBtn = styled.TouchableOpacity({
   width: 36,
   height: 36,
