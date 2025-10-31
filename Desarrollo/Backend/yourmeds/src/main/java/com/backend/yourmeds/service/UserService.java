@@ -160,6 +160,7 @@ public class UserService {
             gDto.setName(g.getName());
             gDto.setPrivate(g.isPrivate());
             gDto.setOwner(m.isOwner());
+            gDto.setColor(g.getColor());
 
             // miembros del grupo
             List<GroupMemberDto> members = groupHasUserRepository.findByGroup_Id(g.getId())

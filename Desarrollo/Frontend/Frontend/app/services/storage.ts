@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ApiGroupsResponse } from "../types/groups";
+import { ApiGroupsResponse } from "../types/groupTypes";
 
 const TOKEN_KEY = "auth_token";
 const USER_ID_KEY = "user_id";
