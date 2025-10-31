@@ -4,11 +4,11 @@ import React, { useState } from 'react';
 import { Alert, Platform, SafeAreaView, StatusBar } from 'react-native';
 import styled from 'styled-components/native';
 
-import ListUsers, { UserRow } from '@/components/groupComponent/listUser';
+import ListUsers, { type UserRow } from '@/components/groupComponent/listUser';
 import ColorPicker from '../../components/groupComponent/colorPicker';
 import GroupTypePicker, { GroupTypeKey } from '../../components/groupComponent/groupTypePicker';
 import SelectUser from '../../components/groupComponent/selectUser';
-import { createGroup } from '../services/group';
+import { addMembersToGroup, createGroup } from '../services/group';
 import type { GroupCreateRequest, GroupResponse } from "../types/groupTypes";
 
 const BLUE = '#0693E9';
@@ -32,68 +32,105 @@ export default function GroupScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupColor, setGroupColor] = useState<string>(COLOR_OPTIONS[0].hex);
   const [groupType, setGroupType] = useState<GroupTypeKey>('compartido');
-  const [loading, setLoading] = useState<boolean>(false);      
+  const [loading, setLoading] = useState<boolean>(false);
 
-  // Agregar usuario (solo correo en esta pantalla)
+  // Agregar usuario (solo correo)
   const [emailTmp, setEmailTmp] = useState('');
 
-  // Lista de usuarios (demo)
+  // Lista de usuarios (sin role)
   const [users, setUsers] = useState<UserRow[]>([
-    { id: '1', email: 'cr@gmail.com', role: 'editor' },
-    { id: '2', email: 'al@gmail.com', role: 'lector' },
-    { id: '3', email: 'br@gmail.com', role: 'lector' },
+    { id: '1', email: 'cr@gmail.com' },
+    { id: '2', email: 'al@gmail.com' },
+    { id: '3', email: 'br@gmail.com' },
   ]);
 
   const handleAddUser = () => {
     const email = emailTmp.trim();
     if (!email) return;
-    setUsers((arr) => [
-      ...arr,
-      { id: String(Date.now()), email, role: 'lector' }, // rol por defecto
-    ]);
+
+    setUsers((prev: UserRow[]) => {
+      if (prev.some((item: UserRow) => item.email.toLowerCase() === email.toLowerCase())) {
+        return prev;
+      }
+      return [...prev, { id: String(Date.now()), email }];
+    });
+
     setEmailTmp('');
   };
 
   const handleDeleteUser = (id: string) => {
-    setUsers((arr) => arr.filter((u) => u.id !== id));
+    setUsers((prev: UserRow[]) => prev.filter((item: UserRow) => item.id !== id));
   };
 
-  // METODO DE CONFIRMACION DE CREACION DE UN GRUPO
-  const handleConfirm = async () => {
-    // Validaciones rápidas
-    if (!groupName.trim()) {
-      Alert.alert("Faltan datos", "El nombre del grupo es obligatorio.");
-      return;
+  // Confirmar creación
+const handleConfirm = async () => {
+  if (!groupName.trim()) {
+    Alert.alert("Faltan datos", "El nombre del grupo es obligatorio.");
+    return;
+  }
+  if (!/^#[0-9A-Fa-f]{6}$/.test(groupColor)) {
+    Alert.alert("Color inválido", "Usa formato HEX #RRGGBB.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const req: GroupCreateRequest = {
+      name: groupName.trim(),
+      color: groupColor.trim(),
+      is_private: groupType === 'privado',
+    };
+
+    // 1) Crear grupo
+    const group: GroupResponse = await createGroup(req);
+    const groupIdRaw = (group as any).id ?? (group as any).group_id;
+    const groupId = typeof groupIdRaw === 'string' ? Number(groupIdRaw) : groupIdRaw;
+
+    if (groupId === undefined || groupId === null || Number.isNaN(groupId)) {
+      throw new Error('No se obtuvo el id del grupo');
     }
-    if (!/^#[0-9A-Fa-f]{6}$/.test(groupColor)) {
-      Alert.alert("Color inválido", "Usa formato HEX #RRGGBB.");
-      return;
+
+    // 2) Agregar usuarios si es compartido
+    let addedCount = 0;
+    if (groupType === 'compartido' && users.length > 0) {
+      const emails = users.map(u => u.email);
+      try {
+        await addMembersToGroup(groupId, emails);
+        addedCount = emails.length;
+      } catch (err) {
+        console.error('Error al agregar usuarios:', err);
+        Alert.alert('Advertencia', 'El grupo fue creado, pero no se pudieron agregar los usuarios.');
+      }
     }
 
-    try {
-      setLoading(true);
+    // 3) Mensaje final amigable
+    const baseMsg = `Grupo "${req.name}" creado correctamente.`;
+    const membersMsg =
+      groupType === 'compartido'
+        ? (addedCount > 0
+            ? ` Se agregaron ${addedCount} usuario(s).`
+            : ' Email incorrecto, no se agregaron al grupo.')
+        : ''; // privado
 
-      const req: GroupCreateRequest = {
-        name: groupName.trim(),
-        color: groupColor.trim(),
-        is_private: groupType === 'compartido' ? true : false,
-      };
+    Alert.alert("¡Listo!", `${baseMsg}${membersMsg}`, [
+      { text: "OK", onPress: () => router.back() }
+    ]);
 
-      const group: GroupResponse = await createGroup(req);
+    // Reset
+    setGroupName("");
+    setGroupColor(COLOR_OPTIONS[0].hex);
+    setEmailTmp('');
+    if (groupType === 'compartido') setUsers([]);
 
-      // (Opcional) aquí podrías actualizar snapshot local o navegar con el id
-      Alert.alert("¡Listo!", "Grupo creado correctamente.", [
-        { text: "OK", onPress: () => router.back() }
-      ]);
+  } catch (e: any) {
+    const msg = e?.message || "No se pudo crear el grupo. Intenta nuevamente.";
+    Alert.alert("Error", msg);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      setGroupName(""); setGroupColor(COLOR_OPTIONS[0].hex);
-    } catch (e: any) {
-      const msg = e?.message || "No se pudo crear el grupo. Intenta nuevamente.";
-      Alert.alert("Error", msg);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <Screen>
@@ -124,47 +161,54 @@ export default function GroupScreen() {
               />
             </NamePill>
 
-            <ColorPicker
-              value={groupColor}
-              onChange={setGroupColor}
-              options={COLOR_OPTIONS}
+            <ColorPicker value={groupColor} onChange={setGroupColor} options={COLOR_OPTIONS} />
+          </Row>
+        </Section>
+
+        {/* Tipo de grupo */}
+        <Section style={{ paddingHorizontal: 21, marginTop: 12 }}>
+          <FieldLabel>TIPO DE GRUPO</FieldLabel>
+          <Row>
+            <GroupTypePicker
+              value={groupType}
+              onChange={(next) => {
+                setGroupType(next);
+                if (next === 'privado') {
+                  setUsers([]);
+                  setEmailTmp('');
+                }
+              }}
             />
           </Row>
         </Section>
 
-        {/* Selecionar tipo de grupo */}
-        <Section style={{ paddingHorizontal: 21, marginTop: 12 }}>
-          <FieldLabel>TIPO DE GRUPO</FieldLabel>
-          <Row>
-            <GroupTypePicker value={groupType} onChange={setGroupType} />
-          </Row>
-        </Section>
+        {/* Solo si es compartido */}
+        {groupType === 'compartido' && (
+          <>
+            <SelectUser
+              email={emailTmp}
+              onEmailChange={setEmailTmp}
+              onAddPress={handleAddUser}
+            />
 
-        {/* Agregar usuario */}
-        <SelectUser
-          email={emailTmp}
-          onEmailChange={setEmailTmp}
-          onAddPress={handleAddUser}
-          showRole={false} // ocultamos el selector de rol aquí
-        />
+            <Section style={{ paddingHorizontal: 21, marginTop: 16 }}>
+              <FieldLabel>LISTA DE USUARIOS</FieldLabel>
+              <UsersBox>
+                <ListUsers items={users} onDelete={handleDeleteUser} />
+              </UsersBox>
+            </Section>
 
-        {/* Lista de usuarios */}
-        <Section style={{ paddingHorizontal: 21, marginTop: 16 }}>
-          <FieldLabel>LISTA DE USUARIOS</FieldLabel>
-          <UsersBox>
-            <ListUsers items={users} onDelete={handleDeleteUser} />
-          </UsersBox>
-        </Section>
-
-        <Spacer h={20} />
+            <Spacer h={20} />
+          </>
+        )}
       </Safe>
 
-      {/* Botón confirmar (fijo abajo) */}
+      {/* Footer */}
       <Footer>
         <ConfirmBtn
           onPress={handleConfirm}
           activeOpacity={0.9}
-          disabled={loading}
+          disabled={loading || (groupType === 'compartido' && users.length === 0)}
           style={{ opacity: loading ? 0.7 : 1 }}
         >
           <ConfirmText>{loading ? "Creando..." : "CONFIRMAR"}</ConfirmText>
@@ -176,10 +220,7 @@ export default function GroupScreen() {
 }
 
 /* =============== estilos =============== */
-const Screen = styled.View({
-  flex: 1,
-  backgroundColor: WHITE,
-});
+const Screen = styled.View({ flex: 1, backgroundColor: WHITE });
 const Safe = styled(SafeAreaView)({ flex: 1 });
 
 const Header = styled.View({
@@ -195,14 +236,9 @@ const HeaderTitle = styled.Text({
   letterSpacing: 1,
   textTransform: 'uppercase',
 });
-const CloseBtn = styled.TouchableOpacity({
-  padding: 6,
-  borderRadius: 10,
-});
+const CloseBtn = styled.TouchableOpacity({ padding: 6, borderRadius: 10 });
 
-const Section = styled.View({
-  marginTop: 8,
-});
+const Section = styled.View({ marginTop: 8 });
 const FieldLabel = styled.Text({
   color: BLUE,
   fontSize: 14,
@@ -241,10 +277,7 @@ const UsersBox = styled.View({
   padding: 10,
 });
 
-const Footer = styled.View({
-  paddingHorizontal: 21,
-  paddingBottom: 16,
-});
+const Footer = styled.View({ paddingHorizontal: 21, paddingBottom: 16 });
 const ConfirmBtn = styled.TouchableOpacity({
   height: 54,
   borderRadius: 16,
@@ -266,8 +299,3 @@ const Spacer = ({ w = 0, h = 0 }: { w?: number; h?: number }) => (
   <SpacerBox style={{ width: w, height: h }} />
 );
 const SpacerBox = styled.View({});
-
-const TypePillWrap = styled.View({
-  flex: 1,
-  alignItems: 'flex-start',
-});
