@@ -33,3 +33,21 @@ export async function createGroup(payload: GroupCreateRequest): Promise<GroupRes
 
   return data as GroupResponse;
 }
+
+// METODO PARA MANEJAR MIEMBROS DE UN GRUPO
+export async function addMembersToGroup(
+  groupId: number | string,
+  emails: string[]
+) {
+  return http(`/api/v1/group/${groupId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userEmails: emails }),
+  });
+}
+
+// Listar miembros del grupo (para refrescar la UI)
+export type MemberDto = { id: number; name: string; isOwner: boolean };
+
+export async function listMembers(groupId: number | string): Promise<MemberDto[]> {
+  return http(`/api/v1/group/${groupId}/members`, { method: 'GET' });
+}
