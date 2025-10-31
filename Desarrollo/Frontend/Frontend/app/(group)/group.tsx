@@ -1,14 +1,15 @@
-// app/(group)/group.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Platform, SafeAreaView, StatusBar } from 'react-native';
+import { Alert, Platform, SafeAreaView, StatusBar } from 'react-native';
 import styled from 'styled-components/native';
 
 import ListUsers, { UserRow } from '@/components/groupComponent/listUser';
 import ColorPicker from '../../components/groupComponent/colorPicker';
+import GroupTypePicker, { GroupTypeKey } from '../../components/groupComponent/groupTypePicker';
 import SelectUser from '../../components/groupComponent/selectUser';
-
+import { createGroup } from '../services/group';
+import type { GroupCreateRequest, GroupResponse } from "../types/groupTypes";
 
 const BLUE = '#0693E9';
 const WHITE = '#FFFFFF';
@@ -30,11 +31,13 @@ export default function GroupScreen() {
   // Estado del formulario
   const [groupName, setGroupName] = useState('');
   const [groupColor, setGroupColor] = useState<string>(COLOR_OPTIONS[0].hex);
+  const [groupType, setGroupType] = useState<GroupTypeKey>('compartido');
+  const [loading, setLoading] = useState<boolean>(false);      
 
   // Agregar usuario (solo correo en esta pantalla)
   const [emailTmp, setEmailTmp] = useState('');
 
-  // Lista de usuarios (usa tu flujo real; aquí hay demo)
+  // Lista de usuarios (demo)
   const [users, setUsers] = useState<UserRow[]>([
     { id: '1', email: 'cr@gmail.com', role: 'editor' },
     { id: '2', email: 'al@gmail.com', role: 'lector' },
@@ -55,15 +58,41 @@ export default function GroupScreen() {
     setUsers((arr) => arr.filter((u) => u.id !== id));
   };
 
-  const handleConfirm = () => {
-    // Aquí arma el payload para tu API
-    // const payload = {
-    //   name: groupName.trim(),
-    //   color: groupColor,
-    //   users: users.map(u => ({ email: u.email, role: u.role })),
-    // };
-    // await api.post('/groups', payload);
-    router.back();
+  // METODO DE CONFIRMACION DE CREACION DE UN GRUPO
+  const handleConfirm = async () => {
+    // Validaciones rápidas
+    if (!groupName.trim()) {
+      Alert.alert("Faltan datos", "El nombre del grupo es obligatorio.");
+      return;
+    }
+    if (!/^#[0-9A-Fa-f]{6}$/.test(groupColor)) {
+      Alert.alert("Color inválido", "Usa formato HEX #RRGGBB.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const req: GroupCreateRequest = {
+        name: groupName.trim(),
+        color: groupColor.trim(),
+        is_private: groupType === 'compartido' ? true : false,
+      };
+
+      const group: GroupResponse = await createGroup(req);
+
+      // (Opcional) aquí podrías actualizar snapshot local o navegar con el id
+      Alert.alert("¡Listo!", "Grupo creado correctamente.", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+
+      setGroupName(""); setGroupColor(COLOR_OPTIONS[0].hex);
+    } catch (e: any) {
+      const msg = e?.message || "No se pudo crear el grupo. Intenta nuevamente.";
+      Alert.alert("Error", msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -103,6 +132,14 @@ export default function GroupScreen() {
           </Row>
         </Section>
 
+        {/* Selecionar tipo de grupo */}
+        <Section style={{ paddingHorizontal: 21, marginTop: 12 }}>
+          <FieldLabel>TIPO DE GRUPO</FieldLabel>
+          <Row>
+            <GroupTypePicker value={groupType} onChange={setGroupType} />
+          </Row>
+        </Section>
+
         {/* Agregar usuario */}
         <SelectUser
           email={emailTmp}
@@ -124,8 +161,13 @@ export default function GroupScreen() {
 
       {/* Botón confirmar (fijo abajo) */}
       <Footer>
-        <ConfirmBtn onPress={handleConfirm} activeOpacity={0.9}>
-          <ConfirmText>CONFIRMAR</ConfirmText>
+        <ConfirmBtn
+          onPress={handleConfirm}
+          activeOpacity={0.9}
+          disabled={loading}
+          style={{ opacity: loading ? 0.7 : 1 }}
+        >
+          <ConfirmText>{loading ? "Creando..." : "CONFIRMAR"}</ConfirmText>
           <Ionicons name="checkmark" size={22} color={WHITE} />
         </ConfirmBtn>
       </Footer>
@@ -224,3 +266,8 @@ const Spacer = ({ w = 0, h = 0 }: { w?: number; h?: number }) => (
   <SpacerBox style={{ width: w, height: h }} />
 );
 const SpacerBox = styled.View({});
+
+const TypePillWrap = styled.View({
+  flex: 1,
+  alignItems: 'flex-start',
+});

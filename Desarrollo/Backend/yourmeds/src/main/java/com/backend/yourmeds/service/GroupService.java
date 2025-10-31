@@ -31,8 +31,8 @@ public class GroupService {
         GroupResponseDto dto = new GroupResponseDto();
         dto.setId(entity.getId());
         dto.setName(entity.getName());
-
         dto.setCant_users(entity.getCantUsers());
+        dto.setColor(entity.getColor());
         dto.setIs_private(entity.isPrivate());
         dto.setCreate_at(entity.getCreatedAt());
         dto.setUpdated_at(entity.getUpdatedAt());
@@ -50,8 +50,8 @@ public class GroupService {
         // 2) Crear y guardar el grupo
         Group g = new Group();
         g.setName(req.name);
-        g.setCantUsers(req.cant_users);
         g.setPrivate(req.is_private);
+        g.setColor(req.color);
         g.setCreatedAt(LocalDateTime.now());
         Group saved = groupRepository.save(g);
 

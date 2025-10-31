@@ -5,13 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Platform,
-  SafeAreaView,
-  StatusBar,
-  Text,
-  View
+    Alert,
+    Dimensions,
+    Platform,
+    SafeAreaView,
+    StatusBar,
+    Text,
+    View
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import styled from 'styled-components/native';
@@ -21,13 +21,13 @@ import AlarmCard from '../../components/AlarmCard';
 
 import { fetchMyGroupsAndAlarms } from '../services/group';
 import {
-  clearToken,
-  getGroupsSnapshot,
-  saveGroupsSnapshot,
-  saveUserId,
+    clearToken,
+    getGroupsSnapshot,
+    saveGroupsSnapshot,
+    saveUserId,
 } from '../services/storage';
 import { fetchMyId } from '../services/user';
-import type { ApiAlarm, ApiGroup, ApiGroupsResponse } from '../types/groups';
+import type { ApiAlarm, ApiGroup, ApiGroupsResponse } from '../types/groupTypes';
 
 // =======================
 // Config & constantes
