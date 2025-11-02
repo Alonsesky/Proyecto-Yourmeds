@@ -136,14 +136,15 @@ export default function GroupCard({
                 <AlarmRow key={a.id}>
                   <AlarmLeft>
                     <Ionicons name="medkit-outline" size={16} color={FG} />
-                    <AlarmName style={{ color: FG }}>{a.name}</AlarmName>
+
+                    <NameTime>
+                      <AlarmName style={{ color: FG }}>{a.name}</AlarmName>
+                      <AlarmTime style={{ color: FG }}>{time}</AlarmTime>
+                    </NameTime>
                   </AlarmLeft>
 
                   <AlarmDivider />
 
-                  <AlarmTime style={{ color: FG }}>{time}</AlarmTime>
-
-                  <AlarmDivider />
 
                   <AlarmRight>
                     <RightCol>
@@ -151,7 +152,7 @@ export default function GroupCard({
                       <FreqText style={{ color: FG }}>{freq}</FreqText>
                     </RightCol>
 
-                    <RightCol style={{ marginLeft: 10 }}>
+                    <RightCol style={{ marginLeft: 1 }}>
                       <Switch
                         value={!!a.active}
                         onValueChange={(next) => onToggleAlarm?.(a.id, next)}
@@ -234,8 +235,24 @@ const AlarmRow = styled.View({
   paddingHorizontal: 12,
   marginTop: 8,
 });
-const AlarmLeft = styled.View({ flexDirection: 'row', alignItems: 'center', minWidth: 80 });
-const AlarmName = styled.Text({ marginLeft: 8, fontSize: 13, fontWeight: '600' });
+
+const AlarmLeft = styled.View({
+  flexDirection: 'row',
+  alignItems: 'center',
+  minWidth: 80,
+});
+
+const NameTime = styled.View({
+  marginLeft: 8,         
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+});
+
+const AlarmName = styled.Text({
+  fontSize: 13,
+  fontWeight: '600',
+  marginBottom: 2,       
+});
 
 const AlarmDivider = styled.View({
   width: 1,
@@ -244,17 +261,27 @@ const AlarmDivider = styled.View({
   marginHorizontal: 10,
 });
 
-const AlarmTime = styled.Text({ fontSize: 22, fontWeight: '800', minWidth: 88, textAlign: 'center' });
+const AlarmTime = styled.Text({
+  fontSize: 16,           
+  fontWeight: '700',
+  textAlign: 'left',
+});
 
 const AlarmRight = styled.View({
   flex: 1,
   flexDirection: 'row',
   alignItems: 'center',
-  justifyContent: 'space-between',
+  justifyContent: 'center',
+  gap: 12,
 });
 const RightCol = styled.View({});
 
-const RangeText = styled.Text({ fontSize: 11, fontWeight: '700', opacity: 0.9 });
+const RangeText = styled.Text({ 
+  fontSize: 11, 
+  fontWeight: '700', 
+  opacity: 0.9 
+});
+
 const FreqText  = styled.Text({ fontSize: 15, fontWeight: '900' });
 
 const RowActions = styled.View({
