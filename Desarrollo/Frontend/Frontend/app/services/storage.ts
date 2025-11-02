@@ -3,10 +3,10 @@ import { ApiGroupsResponse } from "../types/groupTypes";
 
 const TOKEN_KEY = "auth_token";
 const USER_ID_KEY = "user_id";
-const KEY_GROUPS_SNAPSHOT = "groups_snapshot_v1";
 
-
-// METODOS DE TOKEN
+// ===========================
+// TOKEN
+// ===========================
 export async function saveToken(token: string) {
   await AsyncStorage.setItem(TOKEN_KEY, token);
 }
@@ -19,29 +19,53 @@ export async function clearToken() {
   await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
-// METODOS DE USER_ID
+// ===========================
+// USER ID
+// ===========================
 export async function saveUserId(id: string) {
-  await AsyncStorage.setItem(USER_ID_KEY, id); 
+  await AsyncStorage.setItem(USER_ID_KEY, id);
 }
 
-export async function getSavedUserId() {
-  return AsyncStorage.getItem(USER_ID_KEY);    
+export async function getSavedUserId(): Promise<number | null> {
+  const id = await AsyncStorage.getItem(USER_ID_KEY);
+  return id ? Number(id) : null;
 }
 
 export async function removeUserId() {
   await AsyncStorage.removeItem(USER_ID_KEY);
 }
 
-// METODOS PARA GROUPS - ALARMS
+// ===========================
+// LIMPIAR SESIÓN COMPLETA
+// ===========================
+export async function clearSession() {
+  const keys = await AsyncStorage.getAllKeys();
+  const filtered = keys.filter(k =>
+    k === TOKEN_KEY ||
+    k === USER_ID_KEY ||
+    k.startsWith("groups_snapshot_")
+  );
+  await AsyncStorage.multiRemove(filtered);
+}
+
+// ===========================
+// SNAPSHOT por usuario
+// ===========================
 export async function saveGroupsSnapshot(payload: ApiGroupsResponse) {
+  const userId = await getSavedUserId();
+  if (!userId) return; // seguridad
+
   const wrapped = { savedAt: Date.now(), data: payload };
-  await AsyncStorage.setItem(KEY_GROUPS_SNAPSHOT, JSON.stringify(wrapped));
+  await AsyncStorage.setItem(`groups_snapshot_${userId}`, JSON.stringify(wrapped));
 }
 
 export async function getGroupsSnapshot(): Promise<{
   savedAt: number; data: ApiGroupsResponse;
 } | null> {
-  const raw = await AsyncStorage.getItem(KEY_GROUPS_SNAPSHOT);
+  const userId = await getSavedUserId();
+  if (!userId) return null;
+
+  const raw = await AsyncStorage.getItem(`groups_snapshot_${userId}`);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -55,5 +79,7 @@ export async function getGroupsSnapshot(): Promise<{
 }
 
 export async function clearGroupsSnapshot() {
-  await AsyncStorage.removeItem(KEY_GROUPS_SNAPSHOT);
+  const userId = await getSavedUserId();
+  if (!userId) return;
+  await AsyncStorage.removeItem(`groups_snapshot_${userId}`);
 }

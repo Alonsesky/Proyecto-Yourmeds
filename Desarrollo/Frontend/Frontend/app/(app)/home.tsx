@@ -172,23 +172,26 @@ export default function Home() {
   // 3) Enfocar Home: cache -> API (una vez por foco)
   useFocusEffect(
     useCallback(() => {
-      mountedRef.current = true;
-      let cancelled = false;
+      async function load() {
+        try {
+          const id = await fetchMyId();
+          if (!id) return;
 
-      (async () => {
-        setLoading(true);
-        await loadFromStorage();
-        if (!cancelled) {
-          await refreshFromAPI();
-          if (mountedRef.current) setLoading(false);
+          // 1 Consulta info desde la API
+          const remote = await fetchMyGroupsAndAlarms();
+
+          // 2 snapshot local para este usuario
+          await saveGroupsSnapshot(remote);
+
+          // 3 Mostrar información
+          setSnapshot(remote);
+        } catch (err) {
+          console.error("Error al cargar datos del usuario:", err);
         }
-      })();
+      }
 
-      return () => {
-        cancelled = true;
-        mountedRef.current = false;
-      };
-    }, [loadFromStorage, refreshFromAPI])
+      load();
+    }, [])
   );
 
   // Pull-to-refresh
