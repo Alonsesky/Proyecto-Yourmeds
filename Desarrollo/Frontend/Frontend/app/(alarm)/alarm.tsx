@@ -3,33 +3,22 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, SafeAreaView, StatusBar, View } from 'react-native';
 import styled from 'styled-components/native';
 
 import AlarmVar, { VariadoValue } from '../../components/AlarmVar';
 import SelectAlarm, { AlarmType } from '../../components/SelectAlarm';
 import SelectGroup, { GroupOption } from '../../components/SelectGroup';
-import SelectMedicine, { MedicineOption } from '../../components/SelectMedic';
+
+import { createAlarm } from '../../app/services//alarm';
+import { fetchMyGroupsAndAlarms } from '../../app/services/group';
+import { getGroupsSnapshot } from '../../app/services/storage';
+import type { ApiGroupsResponse } from '../../app/types/groupTypes';
+
 
 const BLUE = '#0693E9';
 const WHITE = '#FFFFFF';
-
-/* ===== Demo de Grupos (luego vendrá del backend) ===== */
-const GROUPS: GroupOption[] = [
-  { id: 'g1', name: 'Grupo Personal', icon: '👤' },
-  { id: 'g2', name: 'Grupo Familiar', icon: '👨‍👩‍👧‍👦' },
-  { id: 'g3', name: 'Grupo Cuidador', icon: '🩺' },
-];
-
-/* ===== Demo de medicamentos (luego vendrá del backend) ===== */
-const MEDS: MedicineOption[] = [
-  { id: '1', name: 'Paracetamol 500mg', icon: '💊' },
-  { id: '2', name: 'Ibuprofeno 400mg',  icon: '🧪' },
-  { id: '3', name: 'Omeprazol 20mg',    icon: '🧴' },
-  { id: '4', name: 'Amoxicilina 500mg', icon: '🧬' },
-  { id: '5', name: 'Loratadina 10mg',   icon: '🌿' },
-];
 
 export default function NewAlarmScreen() {
   const router = useRouter();
@@ -37,103 +26,178 @@ export default function NewAlarmScreen() {
   // Tipo de alarma ('fijo' | 'variado')
   const [alarmType, setAlarmType] = useState<AlarmType>('fijo');
 
-  // Grupo seleccionado
+  // Grupos (solo owner)
   const [group, setGroup] = useState<GroupOption | null>(null);
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
 
-  // Configuración de “variado”
+  // Nombre
+  const [name, setName] = useState('');
+
+  // Configuración “variado”
   const [variado, setVariado] = useState<VariadoValue>({
     intervalHours: null,
     startDate: null,
     endDate: null,
   });
 
-  // Medicamento seleccionado
-  const [med, setMed] = useState<MedicineOption | null>(null);
-
-  // Hora seleccionada como Date + mirrors (hora/minuto) para web
+  // Hora seleccionada
   const [time, setTime] = useState(() => {
-    const d = new Date();
-    d.setHours(8, 30, 0, 0);
-    return d;
+    const d = new Date(); d.setHours(8, 30, 0, 0); return d;
   });
   const [hour, setHour] = useState(8);
   const [minute, setMinute] = useState(30);
 
+  // TimePicker control (Android)
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const openTimePicker = () => setShowTimePicker(true);
+  const closeTimePicker = () => setShowTimePicker(false);
+
   const HOURS = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
   const MINUTES = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
 
-  const onChangeNative = (_event: any, selected?: Date) => {
-    if (!selected) return; // Android puede cancelar
+  // Helpers
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const fmtTimeHHmm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const fmtYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const addYears = (d: Date, years: number) => {
+    const x = new Date(d); x.setFullYear(x.getFullYear() + years); return x;
+  };
+
+  const onTimeChange = (event: any, selected?: Date) => {
+    // Android: cerrar siempre
+    if (Platform.OS === 'android') closeTimePicker();
+    if (event?.type === 'dismissed' || !selected) return;
     setTime(selected);
     setHour(selected.getHours());
     setMinute(selected.getMinutes());
   };
 
-  // Sincroniza cuando el usuario cambia en web
   const updateFromWeb = (h: number, m: number) => {
     const d = new Date(time);
-    d.setHours(h);
-    d.setMinutes(m);
-    setTime(d);
-    setHour(h);
-    setMinute(m);
+    d.setHours(h); d.setMinutes(m);
+    setTime(d); setHour(h); setMinute(m);
   };
 
-  // -------- Confirmar --------
-  const onConfirm = () => {
-    // Validaciones mínimas
-    if (!med) {
-      Alert.alert('Falta información', 'Selecciona un medicamento.');
-      return;
-    }
-    if (!group) {
-      Alert.alert('Falta información', 'Selecciona un grupo.');
-      return;
-    }
+  // Cargar grupos desde API y filtrar owner
+  useEffect(() => {
+  (async () => {
+    try {
+      // 1) Intentar desde snapshot local
+      const cached = await getGroupsSnapshot(); // { savedAt, data }
+      let data: ApiGroupsResponse | null = cached?.data ?? null;
 
-    const base = {
-      medicineId: med?.id ?? null,
-      medicineName: med?.name ?? null,
-      alarmType,
-      groupId: group?.id ?? null,
-      groupName: group?.name ?? null,
-    };
+      // 2) Si no hay snapshot válido, pedir al backend como respaldo
+      if (!data || !Array.isArray(data.groups)) {
+        try {
+          data = await fetchMyGroupsAndAlarms();
+        } catch (e) {
+          console.warn('No se pudo refrescar overview desde API:', e);
+        }
+      }
 
-    if (alarmType === 'fijo') {
-      const payload = {
-        ...base,
-        schedule: {
-          mode: 'fixed' as const,
-          hour: time.getHours(),
-          minute: time.getMinutes(),
-          nextAtISO: time.toISOString(),
-        },
+      if (!data) {
+        setGroupOptions([]);
+        setGroup(null);
+        Alert.alert('Sin datos', 'No fue posible obtener tus grupos.');
+        return;
+      }
+
+      const userId = Number(data.userId);
+
+      // 3) Filtrar SOLO grupos donde el usuario es owner
+      //    Regla:
+      //    - Si el DTO trae "owner" a nivel de grupo → usarlo.
+      //    - Si no, derivar desde users[] buscando el userId con isOwner=true.
+      const ownerGroups = (data.groups || []).filter((g: any) => {
+        if (typeof g?.owner === 'boolean') return g.owner === true;
+        if (Array.isArray(g?.users)) {
+          return g.users.some((u: any) => Number(u?.id) === userId && u?.isOwner === true);
+        }
+        return false;
+      });
+
+      const opts = ownerGroups.map((g: any) => ({
+        id: String(g.groupId),
+        name: g.name,
+        icon: '📦',
+      }));
+
+      setGroupOptions(opts);
+      setGroup(opts[0] ?? null);
+
+      if (opts.length === 0) {
+        Alert.alert(
+          'Sin grupos propios',
+          'No tienes grupos donde seas propietario. Crea uno para poder asociar alarmas.'
+        );
+      }
+    } catch (e) {
+      console.error('Error cargando grupos (snapshot/owner):', e);
+      Alert.alert('Error', 'No fue posible cargar tus grupos.');
+    }
+  })();
+}, []);
+
+  // Crear alarma
+  const onConfirm = async () => {
+    try {
+      if (!name.trim()) {
+        Alert.alert('Falta información', 'Ingresa el nombre de la alarma.');
+        return;
+      }
+      if (!group) {
+        Alert.alert('Falta información', 'Selecciona un grupo.');
+        return;
+      }
+
+      const time_alarm = fmtTimeHHmm(time);
+      const alarm_type = (alarmType === 'variado'); // variado=true, fijo=false
+
+      let date_start: string;
+      let date_end: string;
+
+      if (alarm_type) {
+        // Variado: usar fechas elegidas y el intervalo
+        if (!variado.startDate || !variado.endDate || !variado.intervalHours) {
+          Alert.alert('Falta información', 'Completa rango de fechas e intervalo (horas).');
+          return;
+        }
+        const s = new Date(variado.startDate);
+        const e = new Date(variado.endDate);
+        date_start = fmtYmd(s);
+        date_end = fmtYmd(e);
+      } else {
+        // Fijo: el backend normaliza date_end (permanente)
+        const today = new Date();
+        date_start = fmtYmd(today);
+        date_end = ""; // NO enviar date_end en fijo
+      }
+
+      // Construir payload condicional
+      const payload: any = {
+        name: name.trim(),
+        alarm_type,          // false=fijo, true=variado
+        active: true,
+        cant: 1,
+        time_alarm,
+        date_start,
+        group_id: Number(group.id),
       };
-      console.log('NEW ALARM PAYLOAD', payload);
-       router.back(); // <- si quieres cerrar después
-      return;
-    }
 
-    // variado
-    if (!variado.intervalHours || !variado.startDate || !variado.endDate) {
-      Alert.alert(
-        'Falta información',
-        'Completa el intervalo de horas y el rango de fechas.'
-      );
-      return;
-    }
+      // Solo para variado agregamos date_end + interval_hours
+      if (alarm_type) {
+        payload.date_end = date_end;
+        payload.interval_hours = Number(variado.intervalHours);
+      }
+    
 
-    const payload = {
-      ...base,
-      schedule: {
-        mode: 'variable' as const,
-        intervalHours: variado.intervalHours,
-        startDateISO: new Date(variado.startDate).toISOString(),
-        endDateISO: new Date(variado.endDate).toISOString(),
-      },
-    };
-    console.log('NEW ALARM PAYLOAD', payload);
-    // router.back(); // <- si quieres cerrar después
+      const res = await createAlarm(payload);
+      Alert.alert('Éxito ✅', `Alarma creada: ${res.name}`);
+      router.back();
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert('Error ❌', err?.message ?? 'No se pudo crear la alarma.');
+    }
   };
 
   return (
@@ -147,34 +211,22 @@ export default function NewAlarmScreen() {
           </CloseBtn>
         </HeaderBar>
 
-        {/* Select de medicamento */}
-        <SelectMedicine
-          value={med}
-          onChange={setMed}
-          options={MEDS}
-          label="NOMBRE DE LA ALARMA"
-          placeholder="Nombre del medicamento"
-          inset={21}
-        />
+        {/* Nombre */}
+        <Section style={{ marginTop: 12, paddingHorizontal: 20 }}>
+          <Label>NOMBRE DE LA ALARMA</Label>
+          <TextInputEl
+            placeholder="Ej: Vitamina C"
+            value={name}
+            onChangeText={setName}
+            placeholderTextColor="#9bbce0"
+          />
+        </Section>
 
-        {/* Hora próxima */}
+        {/* Hora */}
         <Section style={{ marginTop: 16, paddingHorizontal: 20 }}>
-          <Label>HORA PRÓXIMA</Label>
+          <Label>HORA</Label>
 
-          {Platform.OS !== 'web' ? (
-            <PickerWrap>
-              <DateTimePicker
-                value={time}
-                mode="time"
-                display="spinner"
-                is24Hour
-                minuteInterval={1}
-                onChange={onChangeNative}
-                themeVariant="light"
-                style={{ height: 190 }}
-              />
-            </PickerWrap>
-          ) : (
+          {Platform.OS === 'web' ? (
             <WebTimeRow>
               <WebCol>
                 <WebPickerWrapper>
@@ -208,16 +260,35 @@ export default function NewAlarmScreen() {
                 </WebPickerWrapper>
               </WebCol>
             </WebTimeRow>
+          ) : (
+            <>
+              <FakeInput onPress={openTimePicker} activeOpacity={0.8}>
+                <FakeInputText>
+                  {String(hour).padStart(2, '0')}:{String(minute).padStart(2, '0')}
+                </FakeInputText>
+                <Ionicons name="time-outline" size={20} color={BLUE} />
+              </FakeInput>
+
+              {showTimePicker && (
+                <DateTimePicker
+                  value={time}
+                  mode="time"
+                  is24Hour
+                  display="clock" // más estable que "spinner" en Android
+                  onChange={onTimeChange}
+                />
+              )}
+            </>
           )}
         </Section>
 
-        {/* Tipo de alarma */}
+        {/* Tipo */}
         <Section style={{ marginTop: 16, paddingHorizontal: 20 }}>
           <Label>TIPO DE ALARMA</Label>
           <SelectAlarm value={alarmType} onChange={setAlarmType} />
         </Section>
 
-        {/* Opciones adicionales para 'variado' */}
+        {/* Variado: fechas */}
         {alarmType === 'variado' && (
           <AlarmVar
             value={variado}
@@ -225,17 +296,17 @@ export default function NewAlarmScreen() {
           />
         )}
 
-        {/* Grupo perteneciente */}
+        {/* Grupo (solo owner) */}
         <Section style={{ marginTop: 16 }}>
           <SelectGroup
             value={group}
             onChange={setGroup}
-            options={GROUPS}
+            options={groupOptions}
             inset={21}
           />
         </Section>
 
-        {/* Botón Confirmar */}
+        {/* Confirmar */}
         <Footer>
           <ConfirmBtn onPress={onConfirm} activeOpacity={0.9}>
             <ConfirmText>CONFIRMAR</ConfirmText>
@@ -288,6 +359,16 @@ const Label = styled.Text({
   fontWeight: '900',
   marginBottom: 8,
   letterSpacing: 0.5,
+});
+
+const TextInputEl = styled.TextInput({
+  height: 44,
+  borderRadius: 22,
+  paddingHorizontal: 16,
+  backgroundColor: '#F0F7FF',
+  borderWidth: 2,
+  borderColor: '#C8E1FA',
+  color: '#013b63',
 });
 
 const PickerWrap = styled(View)({
@@ -359,4 +440,22 @@ const Badge = styled.View({
   justifyContent: 'center',
   borderWidth: 2,
   borderColor: WHITE,
+});
+
+// SUMULACION HORA ANDROID
+const FakeInput = styled.TouchableOpacity({
+  height: 44,
+  borderRadius: 22,
+  paddingHorizontal: 16,
+  backgroundColor: '#F0F7FF',
+  borderWidth: 2,
+  borderColor: '#C8E1FA',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+});
+
+const FakeInputText = styled.Text({
+  color: '#013b63',
+  fontWeight: '600',
 });

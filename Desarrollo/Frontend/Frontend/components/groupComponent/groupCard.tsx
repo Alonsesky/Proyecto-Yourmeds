@@ -129,8 +129,18 @@ export default function GroupCard({
           ) : (
             alarms.map((a) => {
               const time = to12h(a.time_alarm);
-              const range = shortRange(a.date_start, a.date_end);
-              const freq = a.alarm_type ? 'CADA DÍA' : 'LUN-VIE';
+              let range = '';
+              let freq = '';
+
+              if (a.alarm_type === false) {
+                // FIJO: permanente sin rango visible
+                freq = 'CADA DÍA';
+                range = 'Todos los días'; // ocultamos fechas
+              } else {
+                // VARIADO: mostrar rango + "CADA X H" si viene
+                range = shortRange(a.date_start, a.date_end);
+                freq = a.interval_hours ? `CADA ${a.interval_hours} H` : 'CADA DÍA';
+              }
 
               return (
                 <AlarmRow key={a.id}>

@@ -27,16 +27,25 @@ public class AlarmController {
         try {
             AlarmResponseDto dto = alarmService.create(body);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
-        } catch (NoSuchElementException e) { // grupo o usuario no encontrado
+
+        } catch (NoSuchElementException e) { // grupo no encontrado
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
                     "message", e.getMessage(),
                     "statusCode", HttpStatus.NOT_FOUND.value()
             ));
-        } catch (IllegalStateException e) { // no es miembro del grupo u otra regla de negocio
+
+        } catch (org.springframework.security.access.AccessDeniedException e) { // no es owner
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", e.getMessage(),
+                    "statusCode", HttpStatus.FORBIDDEN.value()
+            ));
+
+        } catch (IllegalArgumentException e) { // validaciones de negocio/entrada inválida
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                     "message", e.getMessage(),
                     "statusCode", HttpStatus.BAD_REQUEST.value()
             ));
+
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                     "message", "Unexpected error: " + e.getMessage(),
@@ -44,6 +53,7 @@ public class AlarmController {
             ));
         }
     }
+
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
