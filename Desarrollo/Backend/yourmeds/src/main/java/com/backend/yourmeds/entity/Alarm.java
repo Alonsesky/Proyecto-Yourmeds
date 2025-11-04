@@ -31,6 +31,9 @@ public class Alarm {
 
     int cant;
 
+    @Column(name = "interval_hours")
+    private Integer intervalHours;
+
     @Column(name = "time_alarm", nullable = false)
     @JsonFormat(pattern = "HH:mm")
     private LocalTime timeAlarm;

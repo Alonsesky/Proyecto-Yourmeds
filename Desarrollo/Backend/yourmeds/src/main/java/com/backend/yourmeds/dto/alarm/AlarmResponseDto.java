@@ -19,6 +19,7 @@ public class AlarmResponseDto {
     private boolean alarm_type;
     private boolean active;
     private Integer cant;
+    public Integer interval_hours;
     private LocalTime time_alarm;
     private LocalDate date_start;
     private LocalDate date_end;

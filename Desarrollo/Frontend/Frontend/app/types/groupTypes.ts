@@ -1,7 +1,5 @@
 // INTERFACES DE DISTINTAS ENTIDADES QUE SE MANEJARAN CON LOS ENDPOINTS
 
-// app/types/groups.ts
-
 export interface ApiAlarm {
   id: number;
   name: string;
@@ -12,6 +10,7 @@ export interface ApiAlarm {
   date_start: string;      // "YYYY-MM-DD"
   date_end: string;        // "YYYY-MM-DD"
   description: string;
+  interval_hours?: number | null;
 }
 
 export interface ApiGroupUser {
