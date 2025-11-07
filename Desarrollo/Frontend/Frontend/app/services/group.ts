@@ -68,3 +68,10 @@ export type MemberDto = { id: number; name: string; isOwner: boolean };
 export async function listMembers(groupId: number | string): Promise<MemberDto[]> {
   return http(`/api/v1/group/${groupId}/members`, { method: "GET" });
 }
+
+// Metodo Eliminar Grupo
+
+export async function deleteGroup(groupId: number | string) {
+  return http(`/api/v1/group/${groupId}`, { method: 'DELETE' });
+}
+

@@ -20,6 +20,7 @@ export interface ApiGroupUser {
 }
 
 export interface ApiGroup {
+  color(color: any): unknown;
   groupId: number;
   name: string;
   users: ApiGroupUser[];

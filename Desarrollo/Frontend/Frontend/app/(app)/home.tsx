@@ -19,8 +19,12 @@ import styled from 'styled-components/native';
 
 import AddChooser from '../../components/AddChoose';
 
+import ConfirmDeleteAlarmModal from '@/components/deleteComponent/confirmDelete';
+import GroupDeleteOverlay from '@/components/deleteComponent/deleteGroup';
 import GroupCard from '@/components/groupComponent/groupCard';
-import { fetchMyGroupsAndAlarms } from '../services/group';
+
+import { deleteAlarm } from '../services/alarm';
+import { deleteGroup, fetchMyGroupsAndAlarms } from '../services/group';
 import {
   clearToken,
   getGroupsSnapshot,
@@ -54,6 +58,10 @@ const CUP_W = FAB_SIZE + 1;
 const CUP_H = 85;
 const CUP_R = 1;
 
+// === altura exacta del botón de confirmar para alinearlo al FAB ===
+const CONFIRM_SIZE = 64;
+const CONFIRM_BOTTOM = BAR_H - NOTCH_D + (CUP_H - CONFIRM_SIZE) / 2;
+
 // =======================
 // Helpers (no UI)
 // =======================
@@ -86,15 +94,22 @@ function makeBarPath(
   ].join(' ');
 }
 
-// helper mínimo para validar hex #RRGGBB
 const normalizeHex = (c?: string | null) =>
   c && /^#[0-9A-Fa-f]{6}$/.test(c.trim()) ? c.trim() : null;
+
+const resolveMedName = (alarm: any): string =>
+  alarm?.medicineName ??
+  alarm?.medicine?.name ??
+  alarm?.name ??
+  alarm?.title ??
+  alarm?.displayName ??
+  alarm?.drugName ??
+  'Medicamento';
 
 // =======================
 // Componente
 // =======================
 export default function Home() {
-  // Visualización de storage (debug opcional)
   const [showDebug, setShowDebug] = useState(false);
 
   const router = useRouter();
@@ -105,7 +120,6 @@ export default function Home() {
     else router.push('../(group)/group');
   };
 
-  // Estado de datos
   const [snapshot, setSnapshot] = useState<ApiGroupsResponse>({
     userId: 0,
     name: '',
@@ -114,13 +128,56 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Refs para control de efectos
+  // ====== Estado eliminar ALARMA ======
+  const [delState, setDelState] = useState<{
+    visible: boolean;
+    groupId?: number;
+    alarmId?: number | string;
+    medicineName?: string;
+    loading?: boolean;
+  }>({ visible: false, loading: false });
+
+  const openDelete = useCallback(
+    (groupId: number, alarmId: number | string, medicineName: string) => {
+      setDelState({ visible: true, groupId, alarmId, medicineName, loading: false });
+    },
+    []
+  );
+
+  const cancelDelete = useCallback(() => {
+    setDelState((s) => ({ ...s, visible: false, loading: false }));
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!delState.groupId || delState.alarmId == null) return;
+    try {
+      setDelState((s) => ({ ...s, loading: true }));
+      await deleteAlarm(delState.alarmId);
+
+      setSnapshot((prev) => ({
+        ...prev,
+        groups:
+          prev.groups?.map((g) =>
+            g.groupId === delState.groupId
+              ? { ...g, alarms: (g.alarms || []).filter((a) => a.id !== delState.alarmId) }
+              : g
+          ) || [],
+      }));
+
+      setDelState({ visible: false, loading: false });
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'No se pudo eliminar la alarma.');
+      setDelState((s) => ({ ...s, loading: false }));
+    }
+  }, [delState.groupId, delState.alarmId]);
+
+  // ====== Estado eliminar GRUPO ======
+  const [groupDelVisible, setGroupDelVisible] = useState(false);
+  const [groupDelLoading, setGroupDelLoading] = useState(false);
+
   const fetchingRef = useRef(false);
   const mountedRef = useRef(false);
 
-  // =======================
-  // Funciones auxiliares
-  // =======================
   const [probando, setProbando] = useState(false);
   const getMyId = useCallback(async () => {
     if (probando) return;
@@ -140,13 +197,11 @@ export default function Home() {
     }
   }, [probando]);
 
-  // 1) Carga cache
   const loadFromStorage = useCallback(async () => {
     const cached = await getGroupsSnapshot();
     if (cached?.data) setSnapshot(cached.data);
   }, []);
 
-  // 2) Refresca desde API (sin reentradas; maneja 401 limpiando sesión)
   const refreshFromAPI = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -169,7 +224,6 @@ export default function Home() {
     }
   }, [router]);
 
-  // 3) Enfocar Home: cache -> API (una vez por foco)
   useFocusEffect(
     useCallback(() => {
       async function load() {
@@ -177,40 +231,32 @@ export default function Home() {
           const id = await fetchMyId();
           if (!id) return;
 
-          // 1 Consulta info desde la API
           const remote = await fetchMyGroupsAndAlarms();
-
-          // 2 snapshot local para este usuario
           await saveGroupsSnapshot(remote);
-
-          // 3 Mostrar información
           setSnapshot(remote);
+          setLoading(false);
         } catch (err) {
-          console.error("Error al cargar datos del usuario:", err);
+          console.error('Error al cargar datos del usuario:', err);
+          setLoading(false);
         }
       }
-
       load();
     }, [])
   );
 
-  // Pull-to-refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshFromAPI();
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // =======================
-  // Render (un solo return)
-  // =======================
   return (
     <Screen>
       {/* Header */}
       <SafeArea style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
         <HeaderBar>
           <HeaderTitle>ALARMA</HeaderTitle>
-          <TrashButton onPress={() => { /* TODO: acción o limpieza */ }}>
+          <TrashButton onPress={() => setGroupDelVisible(true)}>
             <Ionicons name="trash-outline" size={37} color={BLUE} />
           </TrashButton>
         </HeaderBar>
@@ -233,6 +279,12 @@ export default function Home() {
         }
         renderItem={({ item: group }) => {
           const tint = normalizeHex(group.color) ?? BLUE;
+
+          const getMedName = (alarmId: number | string) => {
+            const a = group.alarms?.find((x) => x.id === alarmId);
+            return resolveMedName(a);
+          };
+
           return (
             <View style={{ marginBottom: 16 }}>
               <GroupCard
@@ -240,18 +292,17 @@ export default function Home() {
                 tint={tint}
                 autoContrast
                 alarms={group.alarms || []}
-                initiallyOpen={true} // controlado por la flecha dentro del card
-                onToggleAlarm={(id, next) => {
-                  // TODO: llamar endpoint PATCH/PUT para activar/desactivar
-                  console.log('toggle', id, next);
-                }}
+                initiallyOpen={true}
+                onToggleAlarm={(id, next) => {}}
                 onEditAlarm={(id) => {
-                  // TODO: navigate a pantalla de edición
-                  console.log('edit', id);
+                  router.push({
+                    pathname: '../(alarm)/alarm',
+                    params: { alarmId: String(id) },
+                  });
                 }}
-                onDeleteAlarm={(id) => {
-                  // TODO: confirmar y llamar delete
-                  console.log('delete', id);
+                onDeleteAlarm={(id: number | string, medicineName?: string) => {
+                  const med = medicineName ?? getMedName(id);
+                  openDelete(group.groupId as number, id, med);
                 }}
               />
             </View>
@@ -274,6 +325,50 @@ export default function Home() {
         onPick={handlePick}
       />
 
+      {/* Modal de confirmar eliminación de ALARMA */}
+      <ConfirmDeleteAlarmModal
+        visible={delState.visible}
+        medicineName={delState.medicineName ?? ''}
+        loading={!!delState.loading}
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+
+      {/* Overlay seleccionar y borrar GRUPO */}
+      <GroupDeleteOverlay
+        visible={groupDelVisible}
+        loading={groupDelLoading}
+        groups={(snapshot.groups || []).map(g => ({
+          groupId: g.groupId as number,
+          name: g.name,
+          color: g.color || null,
+        }))}
+        onCancel={() => setGroupDelVisible(false)}
+        onConfirm={async (groupId) => {
+          try {
+            setGroupDelLoading(true);
+            await deleteGroup(groupId);
+            setSnapshot(prev => ({
+              ...prev,
+              groups: (prev.groups || []).filter(g => g.groupId !== groupId),
+            }));
+            setGroupDelVisible(false);
+          } catch (e: any) {
+            Alert.alert('Error', e?.message || 'No se pudo eliminar el grupo.');
+          } finally {
+            setGroupDelLoading(false);
+          }
+        }}
+        // ---- ajustes clave solicitados ----
+        bottomInset={BAR_H + 20}       // barra visible detrás
+        confirmBottom={CONFIRM_BOTTOM} // alinear con FAB
+        dimmedOpacity={0}              // sin oscurecer contenido de fondo
+        showTitle={false}              // sin título en overlay
+        cancelText="CANCELAR"          // conservar texto
+        confirmButtonTint={BLUE}       // botón azul
+        confirmIconColor="#fff"        // ícono blanco
+      />
+
       {/* Barra inferior + FAB */}
       <BottomWrap>
         <Svg width={SCREEN_W} height={BAR_H} style={{ position: 'absolute', bottom: 0 }}>
@@ -288,10 +383,10 @@ export default function Home() {
         />
 
         <BarContent>
-          <BarButton onPress={() => { /* TODO: ir a Alarmas */ }}>
+          <BarButton onPress={() => {}}>
             <Ionicons name="alarm-outline" size={26} color="#fff" />
           </BarButton>
-          <BarButton onPress={() => { /* TODO: ir a Notas */ }}>
+          <BarButton onPress={() => {}}>
             <Ionicons name="document-text-outline" size={26} color="#fff" />
           </BarButton>
         </BarContent>

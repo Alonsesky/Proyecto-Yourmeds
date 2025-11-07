@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, SafeAreaView, StatusBar, View } from 'react-native';
 import styled from 'styled-components/native';
@@ -11,17 +11,18 @@ import AlarmVar, { VariadoValue } from '../../components/AlarmVar';
 import SelectAlarm, { AlarmType } from '../../components/SelectAlarm';
 import SelectGroup, { GroupOption } from '../../components/SelectGroup';
 
-import { createAlarm } from '../../app/services//alarm';
+import { createAlarm, updateAlarm } from '../../app/services//alarm';
 import { fetchMyGroupsAndAlarms } from '../../app/services/group';
 import { getGroupsSnapshot } from '../../app/services/storage';
 import type { ApiGroupsResponse } from '../../app/types/groupTypes';
-
 
 const BLUE = '#0693E9';
 const WHITE = '#FFFFFF';
 
 export default function NewAlarmScreen() {
   const router = useRouter();
+  const { alarmId } = useLocalSearchParams<{ alarmId?: string }>();
+  const isEdit = !!alarmId;
 
   // Tipo de alarma ('fijo' | 'variado')
   const [alarmType, setAlarmType] = useState<AlarmType>('fijo');
@@ -59,12 +60,8 @@ export default function NewAlarmScreen() {
   const pad2 = (n: number) => String(n).padStart(2, '0');
   const fmtTimeHHmm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   const fmtYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  const addYears = (d: Date, years: number) => {
-    const x = new Date(d); x.setFullYear(x.getFullYear() + years); return x;
-  };
 
   const onTimeChange = (event: any, selected?: Date) => {
-    // Android: cerrar siempre
     if (Platform.OS === 'android') closeTimePicker();
     if (event?.type === 'dismissed' || !selected) return;
     setTime(selected);
@@ -78,67 +75,103 @@ export default function NewAlarmScreen() {
     setTime(d); setHour(h); setMinute(m);
   };
 
-  // Cargar grupos desde API y filtrar owner
+  // Cargar grupos (solo owner) y —si estamos editando— precargar la alarma
   useEffect(() => {
-  (async () => {
-    try {
-      // 1) Intentar desde snapshot local
-      const cached = await getGroupsSnapshot(); // { savedAt, data }
-      let data: ApiGroupsResponse | null = cached?.data ?? null;
+    (async () => {
+      try {
+        // 1) Snapshot local
+        const cached = await getGroupsSnapshot(); // { savedAt, data }
+        let data: ApiGroupsResponse | null = cached?.data ?? null;
 
-      // 2) Si no hay snapshot válido, pedir al backend como respaldo
-      if (!data || !Array.isArray(data.groups)) {
-        try {
-          data = await fetchMyGroupsAndAlarms();
-        } catch (e) {
-          console.warn('No se pudo refrescar overview desde API:', e);
+        // 2) Si falta, intentar refrescar
+        if (!data || !Array.isArray(data.groups)) {
+          try {
+            data = await fetchMyGroupsAndAlarms();
+          } catch {}
         }
-      }
-
-      if (!data) {
-        setGroupOptions([]);
-        setGroup(null);
-        Alert.alert('Sin datos', 'No fue posible obtener tus grupos.');
-        return;
-      }
-
-      const userId = Number(data.userId);
-
-      // 3) Filtrar SOLO grupos donde el usuario es owner
-      //    Regla:
-      //    - Si el DTO trae "owner" a nivel de grupo → usarlo.
-      //    - Si no, derivar desde users[] buscando el userId con isOwner=true.
-      const ownerGroups = (data.groups || []).filter((g: any) => {
-        if (typeof g?.owner === 'boolean') return g.owner === true;
-        if (Array.isArray(g?.users)) {
-          return g.users.some((u: any) => Number(u?.id) === userId && u?.isOwner === true);
+        if (!data) {
+          setGroupOptions([]);
+          setGroup(null);
+          Alert.alert('Sin datos', 'No fue posible obtener tus grupos.');
+          return;
         }
-        return false;
-      });
 
-      const opts = ownerGroups.map((g: any) => ({
-        id: String(g.groupId),
-        name: g.name,
-        icon: '📦',
-      }));
+        const userId = Number(data.userId);
 
-      setGroupOptions(opts);
-      setGroup(opts[0] ?? null);
+        // 3) Solo grupos donde soy owner
+        const ownerGroups = (data.groups || []).filter((g: any) => {
+          if (typeof g?.owner === 'boolean') return g.owner === true;
+          if (Array.isArray(g?.users)) {
+            return g.users.some((u: any) => Number(u?.id) === userId && u?.isOwner === true);
+          }
+          return false;
+        });
 
-      if (opts.length === 0) {
-        Alert.alert(
-          'Sin grupos propios',
-          'No tienes grupos donde seas propietario. Crea uno para poder asociar alarmas.'
-        );
+        const opts = ownerGroups.map((g: any) => ({
+          id: String(g.groupId),
+          name: g.name,
+          icon: '📦',
+        }));
+        setGroupOptions(opts);
+        if (!isEdit) setGroup(opts[0] ?? null);
+
+        // 4) Si es edición, buscar la alarma en cualquiera de mis grupos
+        if (isEdit && data.groups?.length) {
+          let found: any | null = null;
+          let foundGroupId: number | null = null;
+          for (const g of data.groups) {
+            const hit = (g.alarms || []).find((a: any) => String(a.id) === String(alarmId));
+            if (hit) {
+              found = hit;
+              foundGroupId = g.groupId;
+              break;
+            }
+          }
+          if (!found) {
+            Alert.alert('No encontrado', 'No se encontró la alarma a editar.');
+          } else {
+            // Normalizar campos esperados
+            setName(found.name ?? found.medicineName ?? '');
+            // tipo: backend usa alarm_type (true=variado, false=fijo)
+            const isVariado = !!found.alarm_type;
+            setAlarmType(isVariado ? 'variado' : 'fijo');
+
+            // hora: HH:mm
+            const t = (found.time_alarm ?? found.time ?? '08:30').split(':');
+            const h = Number(t[0] ?? 8);
+            const m = Number(t[1] ?? 30);
+            updateFromWeb(h, m);
+
+            // grupo
+            const gOpt = opts.find(o => o.id === String(foundGroupId ?? found.group_id));
+            if (gOpt) setGroup(gOpt);
+
+            // variado
+            if (isVariado) {
+              const start = found.date_start ?? found.startDate ?? null;
+              const end = found.date_end ?? found.endDate ?? null;
+              const interval = found.interval_hours ?? found.intervalHours ?? null;
+              setVariado({
+                startDate: start ? new Date(start) : null,
+                endDate: end ? new Date(end) : null,
+                intervalHours: interval ? Number(interval) : null,
+              });
+            }
+          }
+        }
+
+        if (opts.length === 0) {
+          Alert.alert('Sin grupos propios', 'Crea un grupo para asociar alarmas.');
+        }
+      } catch (e) {
+        console.error('Error cargando grupos/alarma:', e);
+        Alert.alert('Error', 'No fue posible cargar datos.');
       }
-    } catch (e) {
-      console.error('Error cargando grupos (snapshot/owner):', e);
-      Alert.alert('Error', 'No fue posible cargar tus grupos.');
-    }
-  })();
-}, []);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, alarmId]);
 
-  // Crear alarma
+  // Guardar (crear/actualizar)
   const onConfirm = async () => {
     try {
       if (!name.trim()) {
@@ -153,50 +186,40 @@ export default function NewAlarmScreen() {
       const time_alarm = fmtTimeHHmm(time);
       const alarm_type = (alarmType === 'variado'); // variado=true, fijo=false
 
-      let date_start: string;
-      let date_end: string;
-
-      if (alarm_type) {
-        // Variado: usar fechas elegidas y el intervalo
-        if (!variado.startDate || !variado.endDate || !variado.intervalHours) {
-          Alert.alert('Falta información', 'Completa rango de fechas e intervalo (horas).');
-          return;
-        }
-        const s = new Date(variado.startDate);
-        const e = new Date(variado.endDate);
-        date_start = fmtYmd(s);
-        date_end = fmtYmd(e);
-      } else {
-        // Fijo: el backend normaliza date_end (permanente)
-        const today = new Date();
-        date_start = fmtYmd(today);
-        date_end = ""; // NO enviar date_end en fijo
-      }
-
-      // Construir payload condicional
+      // Construir payload básico
       const payload: any = {
         name: name.trim(),
         alarm_type,          // false=fijo, true=variado
         active: true,
         cant: 1,
         time_alarm,
-        date_start,
         group_id: Number(group.id),
       };
 
-      // Solo para variado agregamos date_end + interval_hours
       if (alarm_type) {
-        payload.date_end = date_end;
+        if (!variado.startDate || !variado.endDate || !variado.intervalHours) {
+          Alert.alert('Falta información', 'Completa rango de fechas e intervalo (horas).');
+          return;
+        }
+        payload.date_start = fmtYmd(new Date(variado.startDate));
+        payload.date_end = fmtYmd(new Date(variado.endDate));
         payload.interval_hours = Number(variado.intervalHours);
+      } else {
+        payload.date_start = fmtYmd(new Date());
+        // no enviar date_end en fijo
       }
-    
 
-      const res = await createAlarm(payload);
-      Alert.alert('Éxito ✅', `Alarma creada: ${res.name}`);
+      if (isEdit) {
+        await updateAlarm(String(alarmId), payload);
+        Alert.alert('Guardado ✅', 'Alarma actualizada.');
+      } else {
+        const res = await createAlarm(payload);
+        Alert.alert('Éxito ✅', `Alarma creada: ${res.name}`);
+      }
       router.back();
     } catch (err: any) {
       console.error(err);
-      Alert.alert('Error ❌', err?.message ?? 'No se pudo crear la alarma.');
+      Alert.alert('Error ❌', err?.message ?? 'No se pudo guardar la alarma.');
     }
   };
 
@@ -205,7 +228,7 @@ export default function NewAlarmScreen() {
       <Safe style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
         {/* Header */}
         <HeaderBar>
-          <HeaderTitle>NUEVA ALARMA</HeaderTitle>
+          <HeaderTitle>{isEdit ? 'EDITAR ALARMA' : 'NUEVA ALARMA'}</HeaderTitle>
           <CloseBtn onPress={() => router.back()} accessibilityLabel="Cerrar">
             <Ionicons name="close" size={40} color={BLUE} />
           </CloseBtn>
@@ -274,7 +297,7 @@ export default function NewAlarmScreen() {
                   value={time}
                   mode="time"
                   is24Hour
-                  display="clock" // más estable que "spinner" en Android
+                  display="clock"
                   onChange={onTimeChange}
                 />
               )}
@@ -306,10 +329,10 @@ export default function NewAlarmScreen() {
           />
         </Section>
 
-        {/* Confirmar */}
+        {/* Confirmar / Guardar */}
         <Footer>
           <ConfirmBtn onPress={onConfirm} activeOpacity={0.9}>
-            <ConfirmText>CONFIRMAR</ConfirmText>
+            <ConfirmText>{isEdit ? 'GUARDAR' : 'CONFIRMAR'}</ConfirmText>
             <Badge>
               <Ionicons name="checkmark" size={18} color={BLUE} />
             </Badge>
@@ -371,12 +394,6 @@ const TextInputEl = styled.TextInput({
   color: '#013b63',
 });
 
-const PickerWrap = styled(View)({
-  alignItems: 'center',
-  justifyContent: 'center',
-});
-
-/* ======= Web styles (fallback) ======= */
 const WebTimeRow = styled(View)({
   flexDirection: 'row',
   alignItems: 'center',
@@ -406,7 +423,6 @@ const Colon = styled.Text({
   marginBottom: 6,
 });
 
-/* ======= Footer & Confirm button ======= */
 const Footer = styled.View({
   paddingHorizontal: 18,
   paddingVertical: 18,
@@ -442,7 +458,7 @@ const Badge = styled.View({
   borderColor: WHITE,
 });
 
-// SUMULACION HORA ANDROID
+// Hora Android “simulada”
 const FakeInput = styled.TouchableOpacity({
   height: 44,
   borderRadius: 22,

@@ -96,3 +96,7 @@ export async function fetchAllAlarms(): Promise<AlarmResponse[]> {
 export async function deleteAlarm(id: number): Promise<void> {
   await http(`${ALARMS_PATH}/${id}`, { method: "DELETE" });
 }
+
+export async function updateAlarm(id: number|string, body: any) {
+  return http(`${ALARMS_PATH}/${id}`, { method:'PUT', body: JSON.stringify(body) });
+}
