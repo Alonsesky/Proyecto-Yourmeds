@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ApiGroupsResponse } from "../types/groupTypes";
 
+
+// ===========================
+// ALARMAS (para notificaciones locales)
+// ===========================
+import type { AlarmResponse } from "./alarm";
+
 const TOKEN_KEY = "auth_token";
 const USER_ID_KEY = "user_id";
 
@@ -83,3 +89,30 @@ export async function clearGroupsSnapshot() {
   if (!userId) return;
   await AsyncStorage.removeItem(`groups_snapshot_${userId}`);
 }
+
+const ALARMS_KEY = "alarms_snapshot";
+
+/**
+ * Guarda las alarmas localmente (por ejemplo, tras crear o sincronizar con backend)
+ */
+export async function saveAlarmsSnapshot(alarms: AlarmResponse[]) {
+  const wrapped = { savedAt: Date.now(), data: alarms };
+  await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(wrapped));
+}
+
+export async function getAlarmsSnapshot(): Promise<{ savedAt: number; data: AlarmResponse[] } | null> {
+  const raw = await AsyncStorage.getItem(ALARMS_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.data)) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearAlarmsSnapshot() {
+  await AsyncStorage.removeItem(ALARMS_KEY);
+}
+

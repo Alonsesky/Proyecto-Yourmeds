@@ -1,20 +1,96 @@
-// app/index.tsx
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  Alert,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-export default function WelcomeScreen() {
+import notifee, {
+  AndroidImportance,
+  AuthorizationStatus,
+  TimestampTrigger,
+  TriggerType,
+} from '@notifee/react-native';
+
+// Solo para el botón de prueba (usa el mismo canal que el scheduler)
+import { ensureAlarmChannel } from './notifications/scheduler';
+
+export default function IndexScreen() {
   const router = useRouter();
+
+  // Botón de prueba rápida (10s)
+  const testLocal10s = useCallback(async () => {
+    try {
+      const settings = await notifee.requestPermission();
+      const enabled =
+        settings.authorizationStatus === AuthorizationStatus.AUTHORIZED ||
+        settings.authorizationStatus === AuthorizationStatus.PROVISIONAL;
+
+      if (!enabled) {
+        Alert.alert('Permiso requerido', 'Activa las notificaciones para poder probar.');
+        return;
+      }
+
+      const channelId =
+        Platform.OS === 'android' ? await ensureAlarmChannel() : undefined;
+
+      const trigger: TimestampTrigger = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: Date.now() + 10_000,
+        alarm: true,
+        allowWhileIdle: true,
+      } as unknown as TimestampTrigger;
+
+      await notifee.createTriggerNotification(
+        {
+          id: `test-${Date.now()}`,
+          title: 'Test local',
+          body: 'Deberías ver esto en ~10 segundos.',
+          android:
+            Platform.OS === 'android'
+              ? {
+                  channelId: channelId!,
+                  importance: AndroidImportance.HIGH,
+                  loopSound: true,
+                  pressAction: { id: 'default' },
+                }
+              : undefined,
+        },
+        trigger
+      );
+
+      Alert.alert('Listo', 'Notificación programada para ~10s.');
+    } catch (e: any) {
+      console.warn('Error al programar test:', e);
+      Alert.alert('Error', String(e?.message ?? e));
+    }
+  }, []);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>YourMeds</Text>
 
-      <TouchableOpacity style={styles.button} onPress={() => router.push('/(auth)/login')}>
+      {/* Botón principal */}
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => router.replace('./(auth)/login')}
+      >
         <Text style={styles.buttonText}>Empezar</Text>
+      </TouchableOpacity>
+
+      {/* Botón de prueba rápida (10s) */}
+      <TouchableOpacity style={styles.secondaryButton} onPress={testLocal10s}>
+        <Text style={styles.secondaryText}>Probar notificación (10s)</Text>
       </TouchableOpacity>
     </View>
   );
 }
+
+const BLUE = '#007BFF';
 
 const styles = StyleSheet.create({
   container: {
@@ -23,20 +99,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  logo: {
-    width: 180,
-    height: 180,
-    marginBottom: 30,
+    gap: 16,
   },
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#007BFF',
+    color: BLUE,
     marginBottom: 40,
   },
   button: {
-    backgroundColor: '#007BFF',
+    backgroundColor: BLUE,
     paddingVertical: 14,
     paddingHorizontal: 40,
     borderRadius: 30,
@@ -44,6 +116,18 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: BLUE,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  secondaryText: {
+    color: BLUE,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

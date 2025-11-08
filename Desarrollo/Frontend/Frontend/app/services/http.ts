@@ -1,10 +1,57 @@
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import { getToken } from "./storage";
 
-const API_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:8080" :
-  Platform.OS === "ios"     ? "http://localhost:8080" : "http://192.168.15.55:8080";
+// --- Ajusta si usas otro puerto ---
+const PORT = 8080;
 
+// (opcional) usa EXPO_PUBLIC_API_BASE si lo defines en EAS (sincronico)
+const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
+
+// Detecta host una sola vez (sincrónico y muy rápido)
+function getAutoBase(): string {
+  // 1) Si viene por ENV, úsalo tal cual (puede traer http(s) y puerto)
+  if (ENV_BASE) return ENV_BASE;
+
+  // 2) Intenta desde la URL del bundle (funciona en RN, Expo Dev Client)
+  try {
+    const url: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
+    if (url) {
+      const u = new URL(url);
+      const host = normalizeHost(u.hostname);
+      return buildBase(host);
+    }
+  } catch {}
+
+  // 3) RN web (si alguna vez corres en web)
+  try {
+    // @ts-ignore
+    const host = typeof window !== "undefined" ? window.location?.hostname : "";
+    if (host) return buildBase(normalizeHost(host));
+  } catch {}
+
+  // 4) Fallbacks sensatos por plataforma
+  const fallbackHost = Platform.OS === "ios" ? "localhost" : "10.0.2.2";
+  return buildBase(fallbackHost);
+}
+
+function normalizeHost(host: string) {
+  // En emulador Android, "localhost" debe ser 10.0.2.2 para hablar con tu PC
+  if ((host === "localhost" || host === "127.0.0.1") && Platform.OS === "android") {
+    return "10.0.2.2";
+  }
+  return host || (Platform.OS === "ios" ? "localhost" : "10.0.2.2");
+}
+
+function buildBase(host: string) {
+  // Si ENV_BASE no se usó, construimos http://host:PORT
+  // (si necesitas https en prod, define EXPO_PUBLIC_API_BASE)
+  return `http://${host}:${PORT}`;
+}
+
+// ===== aquí queda tu base dinámica =====
+const API_URL = getAutoBase();
+
+// ==================== tu código original sigue igual ====================
 type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
 function isAuthPath(path: string) {
@@ -21,9 +68,8 @@ export async function http(path: string, options: Options = {}) {
     ...(options.headers || {}),
   };
 
-  // No se envia Autorization a enlaces: /api/v1/auth/**
+  // No se envía Authorization a /api/v1/auth/**
   if (stored && !isAuthPath(path)) {
-    // Si el token ya viene con "Bearer ", se utiliza o en caso contrario se agrega Bearer al token
     const hasBearer = /^Bearer\s+/i.test(stored);
     headers.Authorization = hasBearer ? stored : `Bearer ${stored}`;
   }
