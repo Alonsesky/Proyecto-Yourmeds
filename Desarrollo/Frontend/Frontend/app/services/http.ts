@@ -3,7 +3,7 @@ import { getToken } from "./storage";
 
 const API_URL =
   Platform.OS === "android" ? "http://10.0.2.2:8080" :
-  Platform.OS === "ios"     ? "http://localhost:8080" : "http://192.168.0.117:8080";
+  Platform.OS === "ios"     ? "http://localhost:8080" : "http://192.168.15.55:8080";
 
 type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
@@ -21,7 +21,7 @@ export async function http(path: string, options: Options = {}) {
     ...(options.headers || {}),
   };
 
-  // No se enbia Autorization a enlaces: /api/v1/auth/**
+  // No se envia Autorization a enlaces: /api/v1/auth/**
   if (stored && !isAuthPath(path)) {
     // Si el token ya viene con "Bearer ", se utiliza o en caso contrario se agrega Bearer al token
     const hasBearer = /^Bearer\s+/i.test(stored);

@@ -25,8 +25,6 @@ public class Group {
     @Column(name = "cant_users")
     int cantUsers;
 
-    String description;
-
     @Column(name = "is_private")
     private boolean isPrivate;
 
@@ -36,6 +34,8 @@ public class Group {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    private String color;
 
     // Atributo relacion con User
     @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)

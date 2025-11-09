@@ -31,9 +31,8 @@ public class GroupService {
         GroupResponseDto dto = new GroupResponseDto();
         dto.setId(entity.getId());
         dto.setName(entity.getName());
-        dto.setDescription(entity.getDescription());
-
         dto.setCant_users(entity.getCantUsers());
+        dto.setColor(entity.getColor());
         dto.setIs_private(entity.isPrivate());
         dto.setCreate_at(entity.getCreatedAt());
         dto.setUpdated_at(entity.getUpdatedAt());
@@ -51,9 +50,8 @@ public class GroupService {
         // 2) Crear y guardar el grupo
         Group g = new Group();
         g.setName(req.name);
-        g.setCantUsers(req.cant_users);
-        g.setDescription(req.description);
         g.setPrivate(req.is_private);
+        g.setColor(req.color);
         g.setCreatedAt(LocalDateTime.now());
         Group saved = groupRepository.save(g);
 
@@ -94,7 +92,6 @@ public class GroupService {
                 .orElseThrow(() -> new NoSuchElementException("Group not found with id: " + id));
 
         if (request.name != null) group.setName(request.name);
-        if (request.description != null) group.setDescription(request.description);
         if (request.cant_users != null) group.setCantUsers(request.cant_users);
         if (request.is_private != null) group.setPrivate(request.is_private);
 

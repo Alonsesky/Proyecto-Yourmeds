@@ -13,4 +13,5 @@ public interface GroupHasUserRepository extends JpaRepository<GroupHasUser, Grou
     List<GroupHasUser> findByGroup_Id(Long groupId);
     Optional<GroupHasUser> findById_GroupIdAndId_UserId(Long groupId, Long userId);
     boolean existsById_GroupIdAndId_UserId(Long groupId, Long userId);
+    boolean existsByGroupIdAndUserIdAndIsOwnerTrue(Long groupId, Long userId);
 }

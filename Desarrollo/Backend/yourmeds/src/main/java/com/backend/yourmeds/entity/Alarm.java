@@ -1,13 +1,14 @@
 package com.backend.yourmeds.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
-import java.util.Date;
 
 @Getter
 @Setter
@@ -28,13 +29,19 @@ public class Alarm {
     @Column(nullable = false)
     boolean active;
 
-    @Column(nullable = false)
     int cant;
 
-    @Column(nullable = false)
+    @Column(name = "interval_hours")
+    private Integer intervalHours;
+
+    @Column(name = "time_alarm", nullable = false)
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime timeAlarm;
+
+    @Column(name = "date_start", nullable = false)
     LocalDate dateStart;
 
-    @Column(nullable = false)
+    @Column(name = "date_end", nullable = false)
     LocalDate dateEnd;
 
     String description;
@@ -52,17 +59,17 @@ public class Alarm {
     public Alarm() {
     }
 
-    public Alarm(Long id, String name, boolean alarmType, boolean active, int cant, LocalDate dateStart, LocalDate dateEnd, String description, ZonedDateTime timestamp) {
+    public Alarm(Long id, String name, boolean alarmType, boolean active, int cant, LocalTime timeAlarm, LocalDate dateStart, LocalDate dateEnd, String description, ZonedDateTime timestamp, Group group) {
         this.id = id;
         this.name = name;
         this.alarmType = alarmType;
         this.active = active;
         this.cant = cant;
+        this.timeAlarm = timeAlarm;
         this.dateStart = dateStart;
         this.dateEnd = dateEnd;
         this.description = description;
         this.timestamp = timestamp;
+        this.group = group;
     }
-
-
 }

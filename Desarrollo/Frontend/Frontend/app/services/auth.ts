@@ -1,5 +1,6 @@
 import { http } from "./http";
-import { saveToken } from "./storage";
+import { clearSession, saveToken, saveUserId } from "./storage";
+import { fetchMyId } from "./user";
 
 /* === ENDPOINTS === */
 const LOGIN_PATH = "/api/v1/auth/login";
@@ -7,6 +8,9 @@ const REGISTER_PATH = "/api/v1/auth/register";
 
 /* === LOGIN === */
 export async function login(payload: { email: string; password: string }) {
+  // Limpia restos de sesiones anteriores
+  await clearSession();
+
   const data = await http(LOGIN_PATH, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -20,7 +24,12 @@ export async function login(payload: { email: string; password: string }) {
   if (!token) throw new Error("No se recibió token.");
 
   await saveToken(String(token).trim());
-  return data; 
+
+  // Obtener ID del usuario actual
+  const id = await fetchMyId();
+  await saveUserId(String(id));
+
+  return token;
 }
 
 /* === REGISTER === */
@@ -29,7 +38,7 @@ export type RegisterBody = {
   password: string;
   name: string;
   lastName: string;
-  rut: string; 
+  rut: string;
   age: number;
 };
 

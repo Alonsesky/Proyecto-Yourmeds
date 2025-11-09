@@ -160,6 +160,7 @@ public class UserService {
             gDto.setName(g.getName());
             gDto.setPrivate(g.isPrivate());
             gDto.setOwner(m.isOwner());
+            gDto.setColor(g.getColor());
 
             // miembros del grupo
             List<GroupMemberDto> members = groupHasUserRepository.findByGroup_Id(g.getId())
@@ -195,7 +196,13 @@ public class UserService {
         AlarmSummaryDto d = new AlarmSummaryDto();
         d.setId(a.getId());
         d.setName(a.getName());
-        d.setDateStart(a.getDateStart());
+        d.setAlarm_type((a.isAlarmType()));
+        d.setActive(a.isActive());
+        d.setCant(a.getCant());
+        d.setTime_alarm(a.getTimeAlarm());
+        d.setDate_start(a.getDateStart());
+        d.setDate_end(a.getDateEnd());
+        d.setDescription(a.getDescription());
         return d;
     }
 }
