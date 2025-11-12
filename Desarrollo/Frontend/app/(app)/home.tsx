@@ -216,8 +216,9 @@ export default function Home() {
       try {
         const alarms = await getAlarmsFromStorageOrApi();
         await scheduleAll(alarms);
+        console.log('[home] scheduleAll OK ->', alarms.length, 'alarmas');
       } catch (e) {
-        console.warn('[scheduleAll] fallo al programar tras refresh:', e);
+        console.warn('[home] scheduleAll ERROR:', e);
       }
     } catch (err: any) {
       const status = err?.status ?? err?.response?.status;
