@@ -8,10 +8,20 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { Controller, useForm } from 'react-hook-form';
 import * as yup from 'yup';
 
+import LoadingOverlay from '@/components/LoadingOverlay'; // ⬅️ overlay de carga
 import ErrorDialog from '@/components/uiError/errorDesing'; // Modal unificado
 import RegisterSheet, { RegisterSheetRef } from '../(auth)/Register';
+
 import { login } from '../services/auth';
-import { parseApiError } from '../services/error'; // <-- usamos contexto 'auth'
+import { parseApiError } from '../services/error';
+
+import { fetchMyGroupsAndAlarms } from '../services/group';
+import {
+  clearToken,
+  saveGroupsSnapshot,
+  saveUserId,
+} from '../services/storage';
+import { fetchMyId } from '../services/user';
 
 type LoginForm = { email: string; password: string };
 
@@ -39,10 +49,20 @@ export default function LoginScreen() {
   const onLogin = async ({ email, password }: LoginForm) => {
     try {
       setLoadingLogin(true);
+
+      // 1) Autenticación (manteniendo tu servicio tal cual)
       await login({ email, password });
+
+      // 2) Prefetch de datos necesarios para Home
+      const myId = await fetchMyId();
+      await saveUserId(myId);
+
+      const data = await fetchMyGroupsAndAlarms();
+      await saveGroupsSnapshot(data);
+
+      // 3) Navegar cuando TODO está listo
       router.replace('../(app)/home');
     } catch (e: any) {
-      // <<< CAMBIO: fuerza mensaje claro sólo en auth y define fallback >>>
       const { msg, details } = parseApiError(e, {
         context: 'auth',
         fallback: 'No fue posible iniciar sesión.',
@@ -50,6 +70,9 @@ export default function LoginScreen() {
       setErrorMsg(msg);
       setErrorDetails(details);
       setErrorOpen(true);
+
+      // Limpieza por si quedó estado de sesión inconsistente
+      await clearToken();
     } finally {
       setLoadingLogin(false);
     }
@@ -77,6 +100,7 @@ export default function LoginScreen() {
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
+            editable={!loadingLogin}
             style={{ borderColor: errors.email ? '#E53935' : '#000000' }}
           />
         )}
@@ -95,6 +119,7 @@ export default function LoginScreen() {
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
+            editable={!loadingLogin}
             style={{ borderColor: errors.password ? '#E53935' : '#000000' }}
           />
         )}
@@ -114,7 +139,7 @@ export default function LoginScreen() {
       </Row>
 
       <TextLink>¿No tienes Cuenta?</TextLink>
-      <Boton onPress={() => regRef.current?.open()}>
+      <Boton onPress={() => regRef.current?.open()} disabled={loadingLogin}>
         <TextoBoton>Registrarse</TextoBoton>
       </Boton>
 
@@ -130,6 +155,9 @@ export default function LoginScreen() {
         onClose={() => setErrorOpen(false)}
         primaryLabel="Entendido"
       />
+
+      {/* Overlay de carga bloqueante */}
+      <LoadingOverlay visible={loadingLogin} message=" Cargando…" />
     </Contenedor>
   );
 }
