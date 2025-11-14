@@ -32,7 +32,7 @@ import {
   saveGroupsSnapshot,
   saveUserId,
 } from '../services/storage';
-import { fetchMyId, fetchMyProfile, type MeProfile } from '../services/user';
+import { fetchMyId } from '../services/user';
 import type { ApiGroupsResponse } from '../types/groupTypes';
 
 // NEW: reprogramador
