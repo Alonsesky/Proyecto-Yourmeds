@@ -17,6 +17,7 @@ type Props = {
   tint?: string;
   autoContrast?: boolean;
   alarms: ApiAlarm[];
+  users?: GroupUser[]; 
   initiallyOpen?: boolean;
   onPressHeader?: () => void;
   onToggleAlarm?: (alarmId: number, next: boolean) => void;
@@ -64,6 +65,7 @@ export default function GroupCard({
   tint,
   autoContrast = true,
   alarms,
+  users, 
   initiallyOpen = true,
   onPressHeader,
   onToggleAlarm,
@@ -78,6 +80,11 @@ export default function GroupCard({
 
   const [open, setOpen] = useState(initiallyOpen);
 
+  // Personas del grupo (únicas por id)
+  const countPeople = Array.isArray(users)
+    ? new Set(users.map(u => u?.id)).size
+    : 0;
+
   const count = alarms?.length ?? 0;
   const statusText = count ? `${count} alarma${count > 1 ? 's' : ''}` : 'No hay alarmas';
 
@@ -86,6 +93,8 @@ export default function GroupCard({
     setOpen((v) => !v);
     onPressHeader?.();
   };
+
+  
 
   return (
     <Wrapper $bg={bg} activeOpacity={0.9}>
@@ -106,8 +115,8 @@ export default function GroupCard({
       {/* HEADER: contador, estado, flecha colapsable */}
       <Header>
         <Left>
-          <Ionicons name="person-outline" size={22} color={FG} />
-          <CountText style={{ color: FG }}> {count || 0}</CountText>
+          <Ionicons name="people-outline" size={22} color={FG} />
+          <CountText style={{ color: FG }}>{countPeople || 0}</CountText>
         </Left>
 
         <Middle>

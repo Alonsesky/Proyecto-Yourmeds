@@ -9,13 +9,9 @@ import notifee, {
 } from '@notifee/react-native';
 
 import { getAlarmsFromStorageOrApi } from '../services/alarm';
-import {
-  ensureAlarmChannel,
-  onVariableDelivered,
-  scheduleAll,
-} from './scheduler';
+import { ensureAlarmChannel, onVariableDelivered, scheduleAll } from './scheduler';
 
-// Permisos
+// ===== Permisos =====
 export async function ensureNotificationPermission(): Promise<AuthorizationStatus> {
   try {
     const settings = await notifee.requestPermission();
@@ -25,54 +21,25 @@ export async function ensureNotificationPermission(): Promise<AuthorizationStatu
   }
 }
 
-// Programar una sola alarma directa (atajo)
-export async function scheduleRealAlarm(opts: {
-  id: string | number;
-  title: string;
-  body: string;
-  date: Date;
-}) {
-  const channelId = await ensureAlarmChannel();
-
-  const trigger: TimestampTrigger = {
-    type: TriggerType.TIMESTAMP,
-    timestamp: opts.date.getTime(),
-    alarm: true,
-    allowWhileIdle: true,
-  } as unknown as TimestampTrigger;
-
-  await notifee.createTriggerNotification(
-    {
-      id: String(opts.id),
-      title: opts.title,
-      body: opts.body,
-      android: {
-        channelId,
-        category: AndroidCategory.ALARM,
-        importance: AndroidImportance.MAX,
-        visibility: AndroidVisibility.PUBLIC,
-        sound: 'default',
-        loopSound: true,
-        vibrationPattern: [500, 800, 1200, 800],
-        pressAction: { id: 'default' },
-        fullScreenAction: { id: 'default' },
-        actions: [
-          { title: 'Tomé mi medicamento', pressAction: { id: 'taken' } },
-          { title: 'Snooze 5 min', pressAction: { id: 'snooze_5' } },
-        ],
-      },
-    },
-    trigger
-  );
-}
-
-// Utilidad
+// ===== Utilidades =====
 export async function cancelById(id?: string) {
   if (!id) return;
   try { await notifee.cancelNotification(id); } catch {}
   try { await notifee.cancelTriggerNotification(id); } catch {}
 }
 
+export async function stopAllAlarms() {
+  try { await notifee.cancelDisplayedNotifications(); } catch {}
+  try {
+    const ts = await notifee.getTriggerNotifications();
+    const ids = (ts ?? [])
+      .map(t => t.notification?.id)
+      .filter(Boolean) as string[];
+    if (ids.length) await notifee.cancelTriggerNotifications(ids);
+  } catch {}
+}
+
+// Reprogramar con “snooze”
 export async function snoozeMinutes(baseId: string, minutes: number) {
   const when = new Date(Date.now() + minutes * 60 * 1000);
   await scheduleRealAlarm({
@@ -83,15 +50,58 @@ export async function snoozeMinutes(baseId: string, minutes: number) {
   });
 }
 
+// ===== Programar una sola alarma directa (atajo) =====
+export async function scheduleRealAlarm(opts: {
+  id: string | number;
+  title: string;
+  body: string;
+  date: Date;
+}) {
+  const channelId = await ensureAlarmChannel(); // <- ahora devuelve 'alarms_v2'
+
+  const trigger: TimestampTrigger = {
+    type: TriggerType.TIMESTAMP,
+    timestamp: opts.date.getTime(),
+    alarm: true,
+    allowWhileIdle: true,
+  } as unknown as TimestampTrigger;
+
+  const payload = {
+    id: String(opts.id),
+    title: opts.title,
+    body: opts.body,
+    android: {
+      channelId,
+      category: AndroidCategory.ALARM,
+      importance: AndroidImportance.MAX,
+      visibility: AndroidVisibility.PUBLIC,
+      sound: 'default',
+      loopSound: true,
+      vibrationPattern: [500, 800, 1200, 800],
+      pressAction: { id: 'default' },
+      // fullScreenAction: { id: 'default' }, // opcional, si config nativa existe
+      actions: [
+        { title: 'Tomé mi medicamento', pressAction: { id: 'taken' } },
+        { title: 'Snooze 5 min', pressAction: { id: 'snooze_5' } },
+      ],
+    },
+  } as const;
+
+  try {
+    await notifee.createTriggerNotification(payload, trigger);
+    console.log('[notifee] trigger programado:', payload.id, '->', trigger.timestamp);
+  } catch (e) {
+    console.warn('[notifee] fallo al programar trigger, enviando inmediata:', e);
+    // Fallback inmediato para verificar que el motor de notificaciones está OK
+    await notifee.displayNotification(payload as any);
+  }
+}
+
 /**
- * Si la notificación entregada es de VARIADO:
- *  - Actualiza el nextAt
- *  - Reprograma todas las alarmas (evita duplicados por ID)
+ * Encadenar el siguiente “variado” tras la entrega (si aplica)
  */
 async function handleAfterDeliver(notificationId?: string) {
   if (!notificationId) return;
-
-  // Prefijos definidos en scheduler
   const m = String(notificationId).match(/^alarm-var-(\d+)$/);
   if (!m) return;
 
@@ -107,7 +117,7 @@ async function handleAfterDeliver(notificationId?: string) {
   }
 }
 
-// Listeners
+// ===== Listeners =====
 export function registerAlarmListeners() {
   const unsubFG = notifee.onForegroundEvent(async ({ type, detail }) => {
     const id = detail.notification?.id ?? '';
@@ -127,6 +137,7 @@ export function registerAlarmListeners() {
         }
         break;
       }
+
       default:
         break;
     }
@@ -150,6 +161,7 @@ export function registerAlarmListeners() {
         }
         break;
       }
+
       default:
         break;
     }
