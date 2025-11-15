@@ -129,7 +129,6 @@ export default function NewAlarmScreen() {
         const opts = ownerGroups.map((g: any) => ({
           id: String(g.groupId),
           name: g.name,
-          icon: '📦',
         }));
         setGroupOptions(opts);
         if (!isEdit) setGroup(opts[0] ?? null);

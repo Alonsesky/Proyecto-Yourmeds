@@ -38,11 +38,7 @@ export default function GroupScreen() {
   const [emailTmp, setEmailTmp] = useState('');
 
   // Lista de usuarios (sin role)
-  const [users, setUsers] = useState<UserRow[]>([
-    { id: '1', email: 'cr@gmail.com' },
-    { id: '2', email: 'al@gmail.com' },
-    { id: '3', email: 'br@gmail.com' },
-  ]);
+  const [users, setUsers] = useState<UserRow[]>([]);
 
   const handleAddUser = () => {
     const email = emailTmp.trim();

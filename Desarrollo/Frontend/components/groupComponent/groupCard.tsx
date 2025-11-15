@@ -22,6 +22,7 @@ type Props = {
   onToggleAlarm?: (alarmId: number, next: boolean) => void;
   onEditAlarm?: (alarmId: number) => void;
   onDeleteAlarm?: (alarmId: number) => void;
+  canEdit?: boolean;            // NUEVO: indica si el usuario puede editar/borrar
 };
 
 const normalizeHex = (c?: string | null) =>
@@ -68,6 +69,7 @@ export default function GroupCard({
   onToggleAlarm,
   onEditAlarm,
   onDeleteAlarm,
+  canEdit = true,            // NUEVO: por defecto true (comportamiento antiguo)
 }: Props) {
   const bg = normalizeHex(tint) ?? BLUE;
   const useDark = autoContrast && isLight(bg);
@@ -95,7 +97,9 @@ export default function GroupCard({
             fill={tint}
             opacity={100}
           />
-          <RibbonText style={{ color: FG , paddingLeft:20, paddingBlock: 3 }} numberOfLines={1}>{name?.toUpperCase()}</RibbonText>
+          <RibbonText style={{ color: FG , paddingLeft:20, paddingBlock: 3 }} numberOfLines={1}>
+            {name?.toUpperCase()}
+          </RibbonText>
         </RibbonSVG>
       </RibbonWrap>
 
@@ -155,7 +159,6 @@ export default function GroupCard({
 
                   <AlarmDivider />
 
-
                   <AlarmRight>
                     <RightCol>
                       <RangeText style={{ color: FG }}>{range}</RangeText>
@@ -165,18 +168,26 @@ export default function GroupCard({
                     <RightCol style={{ marginLeft: 1 }}>
                       <Switch
                         value={!!a.active}
-                        onValueChange={(next) => onToggleAlarm?.(a.id, next)}
+                        disabled={!canEdit}                               // NUEVO: deshabilita switch
+                        onValueChange={(next) => {
+                          if (!canEdit) return;
+                          onToggleAlarm?.(a.id, next);
+                        }}
                         trackColor={{ true: 'rgba(255,255,255,0.6)' }}
                         thumbColor={WHITE}
                       />
-                      <RowActions>
-                        <IconBtn onPress={() => onDeleteAlarm?.(a.id)}>
-                          <Ionicons name="trash-outline" size={18} color={FG} />
-                        </IconBtn>
-                        <IconBtn onPress={() => onEditAlarm?.(a.id)}>
-                          <Ionicons name="create-outline" size={18} color={FG} />
-                        </IconBtn>
-                      </RowActions>
+
+                      {/* BOTONES SOLO PARA DUEÑOS */}
+                      {canEdit && (
+                        <RowActions>
+                          <IconBtn onPress={() => onDeleteAlarm?.(a.id)}>
+                            <Ionicons name="trash-outline" size={18} color={FG} />
+                          </IconBtn>
+                          <IconBtn onPress={() => onEditAlarm?.(a.id)}>
+                            <Ionicons name="create-outline" size={18} color={FG} />
+                          </IconBtn>
+                        </RowActions>
+                      )}
                     </RightCol>
                   </AlarmRight>
                 </AlarmRow>
@@ -253,7 +264,7 @@ const AlarmLeft = styled.View({
 });
 
 const NameTime = styled.View({
-  marginLeft: 8,         
+  marginLeft: 8,
   flexDirection: 'column',
   alignItems: 'flex-start',
 });
@@ -261,7 +272,7 @@ const NameTime = styled.View({
 const AlarmName = styled.Text({
   fontSize: 13,
   fontWeight: '600',
-  marginBottom: 2,       
+  marginBottom: 2,
 });
 
 const AlarmDivider = styled.View({
@@ -272,7 +283,7 @@ const AlarmDivider = styled.View({
 });
 
 const AlarmTime = styled.Text({
-  fontSize: 16,           
+  fontSize: 16,
   fontWeight: '700',
   textAlign: 'left',
 });
@@ -286,13 +297,13 @@ const AlarmRight = styled.View({
 });
 const RightCol = styled.View({});
 
-const RangeText = styled.Text({ 
-  fontSize: 11, 
-  fontWeight: '700', 
-  opacity: 0.9 
+const RangeText = styled.Text({
+  fontSize: 11,
+  fontWeight: '700',
+  opacity: 0.9,
 });
 
-const FreqText  = styled.Text({ fontSize: 15, fontWeight: '900' });
+const FreqText = styled.Text({ fontSize: 15, fontWeight: '900' });
 
 const RowActions = styled.View({
   flexDirection: 'row',
@@ -305,4 +316,3 @@ const IconBtn = styled.TouchableOpacity({
   marginTop: 6,
   alignSelf: 'flex-end',
 });
-
