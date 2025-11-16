@@ -1,3 +1,4 @@
+// components/AddChoose.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Modal, TouchableOpacity } from 'react-native';
@@ -7,11 +8,17 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onPick: (type: 'alarm' | 'group') => void;
+  canAddAlarm?: boolean; // NUEVO
 };
 
 const BLUE = '#0693E9';
 
-export default function AddChooser({ visible, onClose, onPick }: Props) {
+const AddChooser: React.FC<Props> = ({
+  visible,
+  onClose,
+  onPick,
+  canAddAlarm = true,
+}) => {
   return (
     <Modal
       visible={visible}
@@ -19,97 +26,111 @@ export default function AddChooser({ visible, onClose, onPick }: Props) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <BackDrop activeOpacity={1} onPress={onClose}>
-        <Card activeOpacity={1}>
+      <Overlay>
+        <Card>
           <HeaderRow>
             <Title>¿QUÉ QUIERE AGREGAR?</Title>
             <CloseBtn onPress={onClose}>
-              <Ionicons name="close" size={26} color={BLUE} />
+              <Ionicons name="close" size={22} color={BLUE} />
             </CloseBtn>
           </HeaderRow>
 
-          <OptionsRow>
-            <Option onPress={() => onPick('alarm')}>
-              <Ionicons name="alarm" size={46} color="#fff" />
-              <OptionLabel>ALARMA</OptionLabel>
-            </Option>
+          <ButtonsRow>
+            {/* Botón ALARMA */}
+            <ChoiceButton
+              disabled={!canAddAlarm}
+              activeOpacity={canAddAlarm ? 0.7 : 1}
+              onPress={() => {
+                if (!canAddAlarm) return;
+                onPick('alarm');
+              }}
+              style={!canAddAlarm && { opacity: 0.4 }} // visualmente deshabilitado
+            >
+              <Ionicons name="alarm-outline" size={40} color="#fff" />
+              <ChoiceText>ALARMA</ChoiceText>
+              {!canAddAlarm && (
+                <HintText>Primero crea un grupo</HintText>
+              )}
+            </ChoiceButton>
 
-            <Option onPress={() => onPick('group')}>
-              <Ionicons name="people" size={46} color="#fff" />
-              <OptionLabel>GRUPO</OptionLabel>
-            </Option>
-          </OptionsRow>
+            {/* Botón GRUPO */}
+            <ChoiceButton
+              onPress={() => onPick('group')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="people-outline" size={40} color="#fff" />
+              <ChoiceText>GRUPO</ChoiceText>
+            </ChoiceButton>
+          </ButtonsRow>
         </Card>
-      </BackDrop>
+      </Overlay>
     </Modal>
   );
-}
+};
 
-/* ======= estilos ======= */
+export default AddChooser;
 
-const BackDrop = styled.TouchableOpacity({
+// =======================
+// Estilos
+// =======================
+const Overlay = styled.View({
   flex: 1,
-  backgroundColor: 'rgba(0,0,0,0.45)',
-  alignItems: 'center',
+  backgroundColor: 'rgba(0,0,0,0.5)',
   justifyContent: 'center',
-  padding: 18,
+  alignItems: 'center',
 });
 
-const Card = styled(TouchableOpacity)({
-  width: '100%',
+const Card = styled.View({
+  width: '85%',
   backgroundColor: '#fff',
-  borderRadius: 20,
-  paddingVertical: 16,
-  paddingHorizontal: 16,
-  shadowColor: '#000',
-  shadowOpacity: 0.2,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 10,
+  borderRadius: 24,
+  paddingVertical: 18,
+  paddingHorizontal: 18,
 });
 
 const HeaderRow = styled.View({
   flexDirection: 'row',
-  alignItems: 'center',
   justifyContent: 'space-between',
-  marginBottom: 10,
+  alignItems: 'center',
+  marginBottom: 16,
 });
 
 const Title = styled.Text({
-  color: BLUE,
   fontSize: 16,
-  fontWeight: '900',
-  letterSpacing: 0.6,
+  fontWeight: '700',
+  color: BLUE,
 });
 
-const CloseBtn = styled.TouchableOpacity({
-  padding: 6,
-  borderRadius: 10,
+const CloseBtn = styled(TouchableOpacity)({
+  padding: 4,
 });
 
-const OptionsRow = styled.View({
+const ButtonsRow = styled.View({
   flexDirection: 'row',
-  gap: 14,
   justifyContent: 'space-between',
 });
 
-const Option = styled.TouchableOpacity({
+const ChoiceButton = styled(TouchableOpacity)({
   flex: 1,
   backgroundColor: BLUE,
-  borderRadius: 16,
+  borderRadius: 18,
+  paddingVertical: 18,
+  marginHorizontal: 4,
   alignItems: 'center',
   justifyContent: 'center',
-  paddingVertical: 22,
-  shadowColor: '#000',
-  shadowOpacity: 0.12,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 6,
 });
 
-const OptionLabel = styled.Text({
-  marginTop: 8,
+const ChoiceText = styled.Text({
   color: '#fff',
-  fontWeight: '800',
-  letterSpacing: 0.5,
+  fontWeight: '700',
+  fontSize: 14,
+  marginTop: 8,
+});
+
+const HintText = styled.Text({
+  marginTop: 4,
+  color: '#fff',
+  fontSize: 10,
+  textAlign: 'center',
+  opacity: 0.9,
 });
