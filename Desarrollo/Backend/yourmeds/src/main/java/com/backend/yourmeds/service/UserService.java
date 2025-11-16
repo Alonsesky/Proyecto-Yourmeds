@@ -205,5 +205,35 @@ public class UserService {
         d.setDescription(a.getDescription());
         return d;
     }
+    @Transactional
+    public UserResponse update(Long id, UserUpdateRequest r) {
+        var user = userRepository.findById(id)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("User " + id + " no existe"));
+
+        // (Opcional) Reglas simples de unicidad a nivel app
+        if (userRepository.existsByEmailAndIdNot(r.getEmail(), id)) {
+            throw new IllegalArgumentException("Email ya está en uso");
+        }
+        if (userRepository.existsByRutAndIdNot(r.getRut().trim(), id)) {
+            throw new IllegalArgumentException("RUT ya está en uso");
+        }
+
+        // Aplicar cambios
+        user.setName(r.getName());
+        user.setLastName(r.getLast_name());
+        user.setAge(r.getAge());
+        user.setRut(r.getRut());
+        user.setEmail(r.getEmail());
+
+        var saved = userRepository.save(user);
+        return new UserResponse(
+                saved.getId(),
+                saved.getName(),
+                saved.getLastName(),
+                saved.getAge(),
+                saved.getRut(),
+                saved.getEmail()
+        );
+    }
 }
 

@@ -109,7 +109,7 @@ const resolveMedName = (alarm: any): string =>
 const getFirstName = (p?: MeProfile | null) =>
   (p?.name ?? (p as any)?.firstName ?? '').toString().trim();
 
-// NEW: detector de propiedad del grupo (tolera distintos nombres de campos)
+// detector de propiedad del grupo (tolera distintos nombres de campos)
 const isOwner = (g: any, myId: string | number) => {
   const ownerId =
     g.ownerId ?? g.createdBy ?? g.creatorId ?? g.userOwnerId ?? g.owner?.id ?? null;
@@ -141,31 +141,6 @@ export default function Home() {
   const [me, setMe] = useState<MeProfile | null>(null); // perfil para saludo
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // ¿Hay grupos creados?
-  const hasGroups = (snapshot.groups ?? []).length > 0;
-
-  // Navegación original
-  const handlePick = (type: 'alarm' | 'group') => {
-    setChooserOpen(false);
-    if (type === 'alarm') router.push('../(alarm)/alarm');
-    else router.push('../(group)/group');
-  };
-
-  // Versión protegida: bloquea "alarm" si no hay grupos
-  const handlePickSafe = useCallback(
-    (type: 'alarm' | 'group') => {
-      if (type === 'alarm' && !hasGroups) {
-        Alert.alert(
-          'Primero crea un grupo',
-          'Para agregar una alarma debes tener al menos un grupo.'
-        );
-        return;
-      }
-      handlePick(type);
-    },
-    [hasGroups]
-  );
 
   // Estado panel de perfil
   const [profileVisible, setProfileVisible] = useState(false);
@@ -325,12 +300,36 @@ export default function Home() {
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // NEW: calcula lista de grupos borrables (solo propietarios)
+  // NEW: calcula lista de grupos borrables (solo propietarios) y si el usuario tiene grupo propio
   const myId = snapshot.userId ?? null;
   const deletableGroups = (snapshot.groups || []).filter((g) => isOwner(g, myId));
+  const hasOwnGroup = (snapshot.groups || []).some((g) => isOwner(g, myId));
+
+  // Handler del chooser: solo deja agregar ALARMA si hay grupo propio
+  const handlePick = useCallback(
+    (type: 'alarm' | 'group') => {
+      setChooserOpen(false);
+
+      if (type === 'alarm') {
+        const myLocalId = snapshot.userId ?? null;
+        const own = (snapshot.groups || []).some((g) => isOwner(g, myLocalId));
+        if (!own) {
+          Alert.alert(
+            'No puedes agregar alarmas',
+            'Solo puedes crear alarmas dentro de tus grupos personales. Crea primero un grupo propio.'
+          );
+          return;
+        }
+        router.push('../(alarm)/alarm');
+      } else {
+        router.push('../(group)/group');
+      }
+    },
+    [router, snapshot]
+  );
 
   // =======================
-  // Render (un solo return)
+  // Render
   // =======================
   return (
     <Screen>
@@ -367,12 +366,13 @@ export default function Home() {
         }
         renderItem={({ item: group }) => {
           const tint = normalizeHex(group.color) ?? BLUE;
-          const iAmOwner = isOwner(group, myId);   // <<--- ¿soy dueño de este grupo?
 
           const getMedName = (alarmId: number | string) => {
             const a = group.alarms?.find((x) => x.id === alarmId);
             return resolveMedName(a);
           };
+
+          const iAmOwner = isOwner(group, snapshot.userId);
 
           return (
             <View style={{ marginBottom: 16 }}>
@@ -382,10 +382,14 @@ export default function Home() {
                 autoContrast
                 alarms={group.alarms || []}
                 initiallyOpen={true}
-                canEdit={iAmOwner}  // <<--- NUEVO: para que el card pinte los iconos deshabilitados
-                onToggleAlarm={(id, next) => {
-                  // TODO: endpoint activar/desactivar
-                }}
+                canEdit={iAmOwner}
+                onToggleAlarm={
+                  iAmOwner
+                    ? (id, next) => {
+                        // TODO: endpoint activar/desactivar
+                      }
+                    : undefined
+                }
                 onEditAlarm={
                   iAmOwner
                     ? (id) => {
@@ -398,8 +402,8 @@ export default function Home() {
                 }
                 onDeleteAlarm={
                   iAmOwner
-                    ? (id: number | string, medicineName?: string) => {
-                        const med = medicineName ?? getMedName(id);
+                    ? (id: number | string) => {
+                        const med = getMedName(id);
                         openDelete(group.groupId as number, id, med);
                       }
                     : undefined
@@ -424,8 +428,8 @@ export default function Home() {
       <AddChooser
         visible={chooserOpen}
         onClose={() => setChooserOpen(false)}
-        onPick={handlePickSafe}
-        canAddAlarm={hasGroups}
+        onPick={handlePick}
+        canAddAlarm={hasOwnGroup}        // <-- solo habilita ALARMA si hay grupo propio
       />
 
       {/* Modal de perfil de usuario */}
@@ -496,7 +500,6 @@ export default function Home() {
         />
 
         <BarContent>
-          {/* Botón izquierda: alarmas */}
           <BarButton
             onPress={() => {
               /* ir a Alarmas */
@@ -505,7 +508,6 @@ export default function Home() {
             <Ionicons name="alarm-outline" size={26} color="#fff" />
           </BarButton>
 
-          {/* Botón derecha: PERFIL */}
           <BarButton onPress={handleOpenProfile}>
             <Ionicons name="person-circle-outline" size={26} color="#fff" />
           </BarButton>
@@ -566,11 +568,6 @@ const HeaderActions = styled.View({
 
 const IconBtn = styled.TouchableOpacity({
   padding: 6,
-  borderRadius: 12,
-});
-
-const TrashButton = styled.TouchableOpacity({
-  padding: 8,
   borderRadius: 12,
 });
 
