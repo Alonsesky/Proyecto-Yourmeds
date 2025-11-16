@@ -9,10 +9,10 @@ import notifee, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AlarmResponse } from '../services/alarm';
 
-// ==== Canal (¡nuevo ID para forzar prioridad!) ====
+// ==== Canal ====
 export async function ensureAlarmChannel(): Promise<string> {
   return await notifee.createChannel({
-    id: 'alarms_v2',            // ← NUEVO ID
+    id: 'alarms',
     name: 'Alarmas',
     sound: 'default',
     importance: AndroidImportance.MAX,
@@ -38,7 +38,7 @@ function toDate(dateISO: string, timeHHmm?: string): Date {
   return d;
 }
 
-// ==== Persistencia del "siguiente disparo" (variado) ====
+// ==== Persistencia del "siguiente disparo" para variado ====
 const nextKey = (id: number) => `alarm_nextAt_${id}`;
 
 export async function getNextAt(id: number): Promise<number | null> {
@@ -84,6 +84,7 @@ function computeNextForVariable(a: AlarmResponse): number | null {
   const start = toDate(a.date_start, a.time_alarm).getTime();
   const end = a.date_end ? toDate(a.date_end, a.time_alarm).getTime() : null;
 
+  // Toma el próximo múltiplo >= now
   let next = start;
   if (now > start) {
     const passed = now - start;
@@ -108,35 +109,30 @@ export async function scheduleFixed(a: AlarmResponse, channelId: string) {
     allowWhileIdle: true,
   } as unknown as TimestampTrigger;
 
-  const payload = {
-    id: `alarm-fixed-${a.id}`,
-    title: `⏰ ${a.name}`,
-    body: 'Es hora de tu medicamento.',
-    android: {
-      channelId,
-      category: AndroidCategory.ALARM,
-      importance: AndroidImportance.MAX,
-      visibility: AndroidVisibility.PUBLIC,
-      loopSound: true,
-      sound: 'default',
-      pressAction: { id: 'default' },
-      actions: [
-        { title: 'Tomado', pressAction: { id: 'taken' } },
-        { title: '+5 min', pressAction: { id: 'snooze_5' } },
-      ],
+  await notifee.createTriggerNotification(
+    {
+      id: `alarm-fixed-${a.id}`,
+      title: `⏰ ${a.name}`,
+      body: 'Es hora de tu medicamento.',
+      android: {
+        channelId,
+        category: AndroidCategory.ALARM,
+        importance: AndroidImportance.MAX,
+        visibility: AndroidVisibility.PUBLIC,
+        loopSound: true,
+        sound: 'default',
+        pressAction: { id: 'default' },
+        actions: [
+          { title: 'Tomado', pressAction: { id: 'taken' } },
+          { title: '+5 min', pressAction: { id: 'snooze_5' } },
+        ],
+      },
     },
-  } as const;
-
-  try {
-    await notifee.createTriggerNotification(payload as any, trigger);
-    console.log('[notifee] fixed programado:', payload.id, '->', nextTs);
-  } catch (e) {
-    console.warn('[notifee] fallo fixed trigger, immediate fallback:', e);
-    await notifee.displayNotification(payload as any);
-  }
+    trigger
+  );
 }
 
-// Variado: one-shot. El siguiente se encadena al entregarse
+// Variado: one-shot. El siguiente se encadena al entregarse (ver alarmService.notifee.ts)
 export async function scheduleVariable(a: AlarmResponse, channelId: string) {
   const saved = await getNextAt(a.id);
   const nextTs = Number.isFinite(saved ?? NaN) ? (saved as number) : computeNextForVariable(a);
@@ -151,32 +147,27 @@ export async function scheduleVariable(a: AlarmResponse, channelId: string) {
     allowWhileIdle: true,
   } as unknown as TimestampTrigger;
 
-  const payload = {
-    id: `alarm-var-${a.id}`,
-    title: `⏰ ${a.name}`,
-    body: `Toma cada ${a.interval_hours}h.`,
-    android: {
-      channelId,
-      category: AndroidCategory.ALARM,
-      importance: AndroidImportance.MAX,
-      visibility: AndroidVisibility.PUBLIC,
-      loopSound: true,
-      sound: 'default',
-      pressAction: { id: 'default' },
-      actions: [
-        { title: 'Tomado', pressAction: { id: 'taken' } },
-        { title: '+5 min', pressAction: { id: 'snooze_5' } },
-      ],
+  await notifee.createTriggerNotification(
+    {
+      id: `alarm-var-${a.id}`,
+      title: `⏰ ${a.name}`,
+      body: `Toma cada ${a.interval_hours}h.`,
+      android: {
+        channelId,
+        category: AndroidCategory.ALARM,
+        importance: AndroidImportance.MAX,
+        visibility: AndroidVisibility.PUBLIC,
+        loopSound: true,
+        sound: 'default',
+        pressAction: { id: 'default' },
+        actions: [
+          { title: 'Tomado', pressAction: { id: 'taken' } },
+          { title: '+5 min', pressAction: { id: 'snooze_5' } },
+        ],
+      },
     },
-  } as const;
-
-  try {
-    await notifee.createTriggerNotification(payload as any, trigger);
-    console.log('[notifee] variable programado:', payload.id, '->', nextTs);
-  } catch (e) {
-    console.warn('[notifee] fallo variable trigger, immediate fallback:', e);
-    await notifee.displayNotification(payload as any);
-  }
+    trigger
+  );
 }
 
 // Encadenar el siguiente “variado” tras la entrega
@@ -191,7 +182,7 @@ export async function onVariableDelivered(a: AlarmResponse) {
 export async function scheduleAll(alarms: AlarmResponse[]) {
   const channelId = await ensureAlarmChannel();
 
-  // Evita duplicados: limpiar “nuestras” alarmas
+  // Quitar triggers anteriores de "nuestras" alarmas para evitar duplicados
   const existing = await notifee.getTriggerNotifications();
   const idsToRemove = (existing ?? [])
     .map(n => n.notification?.id)

@@ -3,7 +3,7 @@
 // =======================
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -24,7 +24,7 @@ import ProfileUser from '@/components/profileComponent/profileUser';
 import SesionCloseModal from '@/components/sesionClose/sesionClose';
 import AddChooser from '../../components/AddChoose';
 
-import { deleteAlarm, getAlarmsFromStorageOrApi } from '../services/alarm'; // ← NEW
+import { deleteAlarm } from '../services/alarm';
 import { deleteGroup, fetchMyGroupsAndAlarms } from '../services/group';
 import {
   clearToken,
@@ -32,15 +32,8 @@ import {
   saveGroupsSnapshot,
   saveUserId,
 } from '../services/storage';
-<<<<<<< HEAD
 import { fetchMyId, fetchMyProfile, type MeProfile } from '../services/user';
-=======
-import { fetchMyId } from '../services/user';
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
 import type { ApiGroupsResponse } from '../types/groupTypes';
-
-// NEW: reprogramador
-import { scheduleAll } from '../notifications/scheduler'; // ← NEW
 
 // =======================
 // Config & constantes
@@ -116,11 +109,7 @@ const resolveMedName = (alarm: any): string =>
 const getFirstName = (p?: MeProfile | null) =>
   (p?.name ?? (p as any)?.firstName ?? '').toString().trim();
 
-<<<<<<< HEAD
 // NEW: detector de propiedad del grupo (tolera distintos nombres de campos)
-=======
-// Detector de propiedad del grupo (tolera distintos nombres de campos)
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
 const isOwner = (g: any, myId: string | number) => {
   const ownerId =
     g.ownerId ?? g.createdBy ?? g.creatorId ?? g.userOwnerId ?? g.owner?.id ?? null;
@@ -138,14 +127,10 @@ const isOwner = (g: any, myId: string | number) => {
 // Componente
 // =======================
 export default function Home() {
-<<<<<<< HEAD
   const [showDebug, setShowDebug] = useState(false);
 
   const router = useRouter();
   const [chooserOpen, setChooserOpen] = useState(false);
-=======
-  const router = useRouter();
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
 
   // Estado de datos
   const [snapshot, setSnapshot] = useState<ApiGroupsResponse>({
@@ -157,22 +142,16 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-<<<<<<< HEAD
   // ¿Hay grupos creados?
   const hasGroups = (snapshot.groups ?? []).length > 0;
 
   // Navegación original
-=======
-  // UI: modales
-  const [chooserOpen, setChooserOpen] = useState(false);
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
   const handlePick = (type: 'alarm' | 'group') => {
     setChooserOpen(false);
     if (type === 'alarm') router.push('../(alarm)/alarm');
     else router.push('../(group)/group');
   };
 
-<<<<<<< HEAD
   // Versión protegida: bloquea "alarm" si no hay grupos
   const handlePickSafe = useCallback(
     (type: 'alarm' | 'group') => {
@@ -193,8 +172,6 @@ export default function Home() {
   const handleOpenProfile = useCallback(() => setProfileVisible(true), []);
   const handleCloseProfile = useCallback(() => setProfileVisible(false), []);
 
-=======
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
   // ====== Estado para eliminar ALARMA ======
   const [delState, setDelState] = useState<{
     visible: boolean;
@@ -214,6 +191,30 @@ export default function Home() {
   const cancelDelete = useCallback(() => {
     setDelState((s) => ({ ...s, visible: false, loading: false }));
   }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!delState.groupId || delState.alarmId == null) return;
+    try {
+      setDelState((s) => ({ ...s, loading: true }));
+      await deleteAlarm(delState.alarmId);
+
+      // Remover de estado local
+      setSnapshot((prev) => ({
+        ...prev,
+        groups:
+          prev.groups?.map((g) =>
+            g.groupId === delState.groupId
+              ? { ...g, alarms: (g.alarms || []).filter((a) => a.id !== delState.alarmId) }
+              : g
+          ) || [],
+      }));
+
+      setDelState({ visible: false, loading: false });
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'No se pudo eliminar la alarma.');
+      setDelState((s) => ({ ...s, loading: false }));
+    }
+  }, [delState.groupId, delState.alarmId]);
 
   // ====== Estado para eliminar GRUPO ======
   const [groupDelVisible, setGroupDelVisible] = useState(false);
@@ -235,7 +236,6 @@ export default function Home() {
   // Refs para control de efectos
   const fetchingRef = useRef(false);
   const mountedRef = useRef(false);
-<<<<<<< HEAD
 
   // =======================
   // Funciones auxiliares
@@ -258,12 +258,6 @@ export default function Home() {
       setProbando(false);
     }
   }, [probando]);
-=======
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
 
   // 1) Carga cache
   const loadFromStorage = useCallback(async () => {
@@ -271,25 +265,15 @@ export default function Home() {
     if (cached?.data) setSnapshot(cached.data);
   }, []);
 
-  // 2) Refresca desde API (sin reentradas; maneja 401)
+  // 2) Refresca desde API (sin reentradas; maneja 401 limpiando sesión)
   const refreshFromAPI = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
       const data = await fetchMyGroupsAndAlarms();
       if (!mountedRef.current) return;
-
       setSnapshot(data);
       await saveGroupsSnapshot(data);
-
-      // === reprograma tras refrescar ===
-      try {
-        const alarms = await getAlarmsFromStorageOrApi();
-        await scheduleAll(alarms);
-        console.log('[home] scheduleAll OK ->', alarms.length, 'alarmas');
-      } catch (e) {
-        console.warn('[home] scheduleAll ERROR:', e);
-      }
     } catch (err: any) {
       const status = err?.status ?? err?.response?.status;
       if (status === 401) {
@@ -304,16 +288,13 @@ export default function Home() {
     }
   }, [router]);
 
-  // 3) Enfocar Home: cache -> API + perfil + reprogramar
+  // 3) Enfocar Home: cache -> API (una vez por foco) + perfil
   useFocusEffect(
     useCallback(() => {
       async function load() {
         try {
-          await loadFromStorage();
-
           const id = await fetchMyId();
           if (!id) return;
-          await saveUserId(id);
 
           // Perfil para saludo (solo nombre)
           try {
@@ -328,21 +309,13 @@ export default function Home() {
 
           setSnapshot(remote);
           setLoading(false);
-
-          // === reprograma con data recién guardada ===
-          try {
-            const alarms = await getAlarmsFromStorageOrApi();
-            await scheduleAll(alarms);
-          } catch (e) {
-            console.warn('[scheduleAll] fallo al programar después de cargar:', e);
-          }
         } catch (err) {
           console.error('Error al cargar datos del usuario:', err);
           setLoading(false);
         }
       }
       load();
-    }, [loadFromStorage])
+    }, [])
   );
 
   // Pull-to-refresh
@@ -352,53 +325,9 @@ export default function Home() {
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // Eliminar ALARMA (actualiza snapshot, guarda y reprogra)
-  const confirmDelete = useCallback(async () => {
-    if (!delState.groupId || delState.alarmId == null) return;
-    try {
-      setDelState((s) => ({ ...s, loading: true }));
-      await deleteAlarm(delState.alarmId);
-
-      // Remover de estado local
-      let nextSnap: typeof snapshot;
-      setSnapshot((prev) => {
-        nextSnap = {
-          ...prev,
-          groups:
-            prev.groups?.map((g) =>
-              g.groupId === delState.groupId
-                ? { ...g, alarms: (g.alarms || []).filter((a) => a.id !== delState.alarmId) }
-                : g
-            ) || [],
-        };
-        return nextSnap;
-      });
-
-      // Guarda y reprograma con lo nuevo
-      setTimeout(async () => {
-        try {
-          await saveGroupsSnapshot(nextSnap!);
-          const alarms = await getAlarmsFromStorageOrApi();
-          await scheduleAll(alarms);
-        } catch (e) {
-          console.warn('[scheduleAll] reprogramando tras borrar alarma:', e);
-        }
-      }, 0);
-
-      setDelState({ visible: false, loading: false });
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo eliminar la alarma.');
-      setDelState((s) => ({ ...s, loading: false }));
-    }
-  }, [delState.groupId, delState.alarmId, snapshot]);
-
   // NEW: calcula lista de grupos borrables (solo propietarios)
   const myId = snapshot.userId ?? null;
-<<<<<<< HEAD
   const deletableGroups = (snapshot.groups || []).filter((g) => isOwner(g, myId));
-=======
-  const deletableGroups = (snapshot.groups || []).filter(g => isOwner(g, myId));
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
 
   // =======================
   // Render (un solo return)
@@ -416,12 +345,6 @@ export default function Home() {
             <IconBtn onPress={() => setGroupDelVisible(true)}>
               <Ionicons name="trash-outline" size={32} color={BLUE} />
             </IconBtn>
-<<<<<<< HEAD
-=======
-            <IconBtn onPress={() => setLogoutVisible(true)} style={{ marginLeft: 8 }}>
-              <Ionicons name="log-out-outline" size={32} color={BLUE} />
-            </IconBtn>
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
           </HeaderActions>
         </HeaderBar>
       </SafeArea>
@@ -458,13 +381,11 @@ export default function Home() {
                 tint={tint}
                 autoContrast
                 alarms={group.alarms || []}
-                users={group.users}
                 initiallyOpen={true}
                 canEdit={iAmOwner}  // <<--- NUEVO: para que el card pinte los iconos deshabilitados
                 onToggleAlarm={(id, next) => {
                   // TODO: endpoint activar/desactivar
                 }}
-<<<<<<< HEAD
                 onEditAlarm={
                   iAmOwner
                     ? (id) => {
@@ -483,18 +404,6 @@ export default function Home() {
                       }
                     : undefined
                 }
-=======
-                onEditAlarm={(id) => {
-                  router.push({
-                    pathname: '../(alarm)/alarm',
-                    params: { alarmId: String(id) },
-                  });
-                }}
-                onDeleteAlarm={(id: number | string, medicineName?: string) => {
-                  const med = medicineName ?? getMedName(id);
-                  openDelete(group.groupId as number, id, med);
-                }}
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
               />
             </View>
           );
@@ -530,7 +439,7 @@ export default function Home() {
       {/* Modal de cierre de sesión */}
       <SesionCloseModal
         visible={logoutVisible}
-        onCancel={() => setLogoutVisible(false)}
+        onCancel={handleCancelLogout}
         onConfirm={handleConfirmLogout}
       />
 
@@ -547,11 +456,7 @@ export default function Home() {
       <GroupDeleteOverlay
         visible={groupDelVisible}
         loading={groupDelLoading}
-<<<<<<< HEAD
         groups={deletableGroups.map((g) => ({
-=======
-        groups={deletableGroups.map(g => ({
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
           groupId: g.groupId as number,
           name: g.name,
           color: g.color || null,
@@ -560,33 +465,12 @@ export default function Home() {
         onConfirm={async (groupId) => {
           try {
             setGroupDelLoading(true);
+            const uid = snapshot.userId || (await fetchMyId());
             await deleteGroup(groupId);
-<<<<<<< HEAD
             setSnapshot((prev) => ({
               ...prev,
               groups: (prev.groups || []).filter((g) => g.groupId !== groupId),
             }));
-=======
-
-            // Actualizar local
-            let nextSnap: typeof snapshot;
-            setSnapshot(prev => {
-              nextSnap = { ...prev, groups: (prev.groups || []).filter(g => g.groupId !== groupId) };
-              return nextSnap;
-            });
-
-            // Guarda snapshot y reprograma
-            setTimeout(async () => {
-              try {
-                await saveGroupsSnapshot(nextSnap!);
-                const alarms = await getAlarmsFromStorageOrApi();
-                await scheduleAll(alarms);
-              } catch (e) {
-                console.warn('[scheduleAll] reprogramando tras borrar grupo:', e);
-              }
-            }, 0);
-
->>>>>>> 84d7ccec2f5381f5ac832f7e1f7fc032eef9f078
             setGroupDelVisible(false);
           } catch (e: any) {
             Alert.alert('Error', e?.message || 'No se pudo eliminar el grupo.');
@@ -682,6 +566,11 @@ const HeaderActions = styled.View({
 
 const IconBtn = styled.TouchableOpacity({
   padding: 6,
+  borderRadius: 12,
+});
+
+const TrashButton = styled.TouchableOpacity({
+  padding: 8,
   borderRadius: 12,
 });
 
