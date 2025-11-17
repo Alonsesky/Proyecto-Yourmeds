@@ -1,9 +1,6 @@
 package com.backend.yourmeds.controller;
 
-import com.backend.yourmeds.dto.user.CreateUserRequestDto;
-import com.backend.yourmeds.dto.user.CreateUserResponseDto;
-import com.backend.yourmeds.dto.user.LoginRequestDto;
-import com.backend.yourmeds.dto.user.LoginResponseDto;
+import com.backend.yourmeds.dto.user.*;
 import com.backend.yourmeds.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -65,5 +62,12 @@ public class UserController {
         }
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<UserResponse> updateUser(
+            @PathVariable Long id,
+            @RequestBody UserUpdateRequest body
+    ) {
+        return ResponseEntity.ok(userService.update(id, body));
+    }
 
 }
