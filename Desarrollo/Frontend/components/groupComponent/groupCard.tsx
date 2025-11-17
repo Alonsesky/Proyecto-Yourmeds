@@ -22,7 +22,7 @@ type Props = {
   onToggleAlarm?: (alarmId: number, next: boolean) => void;
   onEditAlarm?: (alarmId: number) => void;
   onDeleteAlarm?: (alarmId: number) => void;
-  canEdit?: boolean;            // NUEVO: indica si el usuario puede editar/borrar
+  canEdit?: boolean;
 };
 
 const normalizeHex = (c?: string | null) =>
@@ -69,7 +69,7 @@ export default function GroupCard({
   onToggleAlarm,
   onEditAlarm,
   onDeleteAlarm,
-  canEdit = true,            // NUEVO: por defecto true (comportamiento antiguo)
+  canEdit = true,  
 }: Props) {
   const bg = normalizeHex(tint) ?? BLUE;
   const useDark = autoContrast && isLight(bg);
