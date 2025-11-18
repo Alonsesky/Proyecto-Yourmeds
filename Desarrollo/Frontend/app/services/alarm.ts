@@ -1,4 +1,7 @@
+import type { ApiAlarm, ApiGroupsResponse } from "../types/groupTypes";
+import { fetchMyGroupsAndAlarms } from "./group";
 import { http } from "./http";
+import { getAlarmsSnapshot, saveAlarmsSnapshot } from "./storage";
 
 // ===============================
 // Tipos de datos
@@ -100,3 +103,33 @@ export async function deleteAlarm(id: number): Promise<void> {
 export async function updateAlarm(id: number|string, body: any) {
   return http(`${ALARMS_PATH}/${id}`, { method:'PUT', body: JSON.stringify(body) });
 }
+
+// ===============================
+// Cargar alarmas para notificaciones
+// ===============================
+export async function getAlarmsFromStorageOrApi(): Promise<ApiAlarm[]> {
+  // 1) Intentar leer snapshot local
+  const cached = await getAlarmsSnapshot();
+  let alarms: ApiAlarm[] | null = cached?.data ?? null;
+
+  try {
+    // 2) Usar el mismo endpoint que el Home (grupos + alarmas)
+    const resp: ApiGroupsResponse = await fetchMyGroupsAndAlarms();
+
+    // Aplanar todas las alarmas de todos los grupos
+    const fresh: ApiAlarm[] = resp.groups.flatMap((g) => g.alarms ?? []);
+
+    alarms = fresh;
+
+    // Guardar snapshot para usos offline o reintentos
+    await saveAlarmsSnapshot(fresh);
+  } catch (e) {
+    console.warn(
+      "[alarm] No se pudo sincronizar alarmas desde grupos, usando snapshot local si existe",
+      e
+    );
+  }
+
+  return alarms ?? [];
+}
+

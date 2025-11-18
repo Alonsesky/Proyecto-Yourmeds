@@ -11,14 +11,18 @@ import AlarmVar, { VariadoValue } from '../../components/AlarmVar';
 import SelectAlarm, { AlarmType } from '../../components/SelectAlarm';
 import SelectGroup, { GroupOption } from '../../components/SelectGroup';
 
-import { createAlarm, updateAlarm } from '../../app/services//alarm';
+import { createAlarm, getAlarmsFromStorageOrApi, updateAlarm } from '../../app/services//alarm';
 import { fetchMyGroupsAndAlarms } from '../../app/services/group';
 import { getGroupsSnapshot } from '../../app/services/storage';
 import type { ApiGroupsResponse } from '../../app/types/groupTypes';
 
 // Modal de error reutilizable
 import ErrorDialog from '@/components/uiError/errorDesing';
+import { scheduleAll } from '../notifications/scheduler';
 import { parseApiError } from '../services/error';
+
+
+
 
 const BLUE = '#0693E9';
 const WHITE = '#FFFFFF';
@@ -224,11 +228,20 @@ export default function NewAlarmScreen() {
       }
 
       if (isEdit) {
-        await updateAlarm(String(alarmId), payload);
-      } else {
-        await createAlarm(payload);
-      }
-      router.back();
+      await updateAlarm(String(alarmId), payload);
+    } else {
+      await createAlarm(payload);
+    }
+
+    // Reprogramar todas las notificaciones según el estado ACTUAL del backend
+    try {
+      const fresh = await getAlarmsFromStorageOrApi();
+      await scheduleAll(fresh);
+    } catch (e) {
+      console.warn('No se pudo reprogramar las alarmas después de guardar', e);
+    }
+
+    router.back();
     } catch (err: any) {
       const { msg, details } = parseApiError(err);
       showError(msg, details);
