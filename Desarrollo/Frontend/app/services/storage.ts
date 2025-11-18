@@ -5,7 +5,6 @@ import { ApiGroupsResponse } from "../types/groupTypes";
 // ===========================
 // ALARMAS (para notificaciones locales)
 // ===========================
-import type { AlarmResponse } from "./alarm";
 
 const TOKEN_KEY = "auth_token";
 const USER_ID_KEY = "user_id";
@@ -90,29 +89,32 @@ export async function clearGroupsSnapshot() {
   await AsyncStorage.removeItem(`groups_snapshot_${userId}`);
 }
 
+// ===============================
+// Snapshot de alarmas para notificaciones
+// ===============================
 const ALARMS_KEY = "alarms_snapshot";
 
-/**
- * Guarda las alarmas localmente (por ejemplo, tras crear o sincronizar con backend)
- */
-export async function saveAlarmsSnapshot(alarms: AlarmResponse[]) {
-  const wrapped = { savedAt: Date.now(), data: alarms };
-  await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(wrapped));
-}
-
-export async function getAlarmsSnapshot(): Promise<{ savedAt: number; data: AlarmResponse[] } | null> {
-  const raw = await AsyncStorage.getItem(ALARMS_KEY);
-  if (!raw) return null;
+export async function saveAlarmsSnapshot(alarms: any[]) {
+  const wrapped = {
+    savedAt: Date.now(),
+    data: alarms,
+  };
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.data)) return parsed;
-    return null;
-  } catch {
-    return null;
+    await AsyncStorage.setItem(ALARMS_KEY, JSON.stringify(wrapped));
+  } catch (e) {
+    console.warn("[storage] No se pudo guardar snapshot de alarmas", e);
   }
 }
 
-export async function clearAlarmsSnapshot() {
-  await AsyncStorage.removeItem(ALARMS_KEY);
+export async function getAlarmsSnapshot(): Promise<{ savedAt: number; data: any[] } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(ALARMS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.data)) return parsed;
+    return null;
+  } catch (e) {
+    console.warn("[storage] No se pudo leer snapshot de alarmas", e);
+    return null;
+  }
 }
-

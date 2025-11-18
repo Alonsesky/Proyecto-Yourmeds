@@ -24,7 +24,8 @@ import ProfileUser from '@/components/profileComponent/profileUser';
 import SesionCloseModal from '@/components/sesionClose/sesionClose';
 import AddChooser from '../../components/AddChoose';
 
-import { deleteAlarm } from '../services/alarm';
+import { scheduleAll } from '../notifications/scheduler';
+import { deleteAlarm, getAlarmsFromStorageOrApi } from '../services/alarm';
 import { deleteGroup, fetchMyGroupsAndAlarms } from '../services/group';
 import {
   clearToken,
@@ -168,28 +169,42 @@ export default function Home() {
   }, []);
 
   const confirmDelete = useCallback(async () => {
-    if (!delState.groupId || delState.alarmId == null) return;
-    try {
-      setDelState((s) => ({ ...s, loading: true }));
-      await deleteAlarm(delState.alarmId);
+  if (!delState.groupId || delState.alarmId == null) return;
 
-      // Remover de estado local
+    try {
+      // 1) Borrar en el backend
+      await deleteAlarm(delState.alarmId as number); // o ajusta el tipo en el service a number | string
+
+      // 2) 🔔 Reprogramar todas las notificaciones según el estado actual
+      try {
+        const fresh = await getAlarmsFromStorageOrApi();
+        await scheduleAll(fresh);
+      } catch (e) {
+        console.warn(
+          '[home] No se pudo reprogramar las alarmas después de eliminar',
+          e
+        );
+      }
+
+      // 3) Actualizar estado local (UI)
       setSnapshot((prev) => ({
         ...prev,
-        groups:
-          prev.groups?.map((g) =>
-            g.groupId === delState.groupId
-              ? { ...g, alarms: (g.alarms || []).filter((a) => a.id !== delState.alarmId) }
-              : g
-          ) || [],
+        groups: prev.groups.map((g) =>
+          g.groupId === delState.groupId
+            ? {
+                ...g,
+                alarms: (g.alarms || []).filter(
+                  (a) => a.id !== delState.alarmId
+                ),
+              }
+            : g
+        ),
       }));
-
-      setDelState({ visible: false, loading: false });
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo eliminar la alarma.');
-      setDelState((s) => ({ ...s, loading: false }));
+    } finally {
+      setDelState((prev) => ({ ...prev, visible: false }));
     }
   }, [delState.groupId, delState.alarmId]);
+
 
   // ====== Estado para eliminar GRUPO ======
   const [groupDelVisible, setGroupDelVisible] = useState(false);
