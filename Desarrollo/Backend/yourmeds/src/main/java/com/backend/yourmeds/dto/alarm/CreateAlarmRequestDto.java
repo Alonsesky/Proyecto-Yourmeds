@@ -15,6 +15,8 @@ public class CreateAlarmRequestDto {
 
     public Integer cant;
 
+    public Integer interval_hours;
+
     public LocalTime time_alarm;
 
     public LocalDate date_start;

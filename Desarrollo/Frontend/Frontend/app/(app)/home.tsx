@@ -7,18 +7,19 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  FlatList,
   Platform,
   SafeAreaView,
   StatusBar,
   Text,
-  View
+  View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import styled from 'styled-components/native';
 
 import AddChooser from '../../components/AddChoose';
-import AlarmCard from '../../components/AlarmCard';
 
+import GroupCard from '@/components/groupComponent/groupCard';
 import { fetchMyGroupsAndAlarms } from '../services/group';
 import {
   clearToken,
@@ -27,7 +28,7 @@ import {
   saveUserId,
 } from '../services/storage';
 import { fetchMyId } from '../services/user';
-import type { ApiAlarm, ApiGroup, ApiGroupsResponse } from '../types/groups';
+import type { ApiGroupsResponse } from '../types/groupTypes';
 
 // =======================
 // Config & constantes
@@ -85,11 +86,15 @@ function makeBarPath(
   ].join(' ');
 }
 
+// helper mínimo para validar hex #RRGGBB
+const normalizeHex = (c?: string | null) =>
+  c && /^#[0-9A-Fa-f]{6}$/.test(c.trim()) ? c.trim() : null;
+
 // =======================
 // Componente
 // =======================
 export default function Home() {
-  // Visualización de storage
+  // Visualización de storage (debug opcional)
   const [showDebug, setShowDebug] = useState(false);
 
   const router = useRouter();
@@ -167,23 +172,26 @@ export default function Home() {
   // 3) Enfocar Home: cache -> API (una vez por foco)
   useFocusEffect(
     useCallback(() => {
-      mountedRef.current = true;
-      let cancelled = false;
+      async function load() {
+        try {
+          const id = await fetchMyId();
+          if (!id) return;
 
-      (async () => {
-        setLoading(true);
-        await loadFromStorage();
-        if (!cancelled) {
-          await refreshFromAPI();
-          if (mountedRef.current) setLoading(false);
+          // 1 Consulta info desde la API
+          const remote = await fetchMyGroupsAndAlarms();
+
+          // 2 snapshot local para este usuario
+          await saveGroupsSnapshot(remote);
+
+          // 3 Mostrar información
+          setSnapshot(remote);
+        } catch (err) {
+          console.error("Error al cargar datos del usuario:", err);
         }
-      })();
+      }
 
-      return () => {
-        cancelled = true;
-        mountedRef.current = false;
-      };
-    }, [loadFromStorage, refreshFromAPI])
+      load();
+    }, [])
   );
 
   // Pull-to-refresh
@@ -193,92 +201,71 @@ export default function Home() {
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // Render helpers
-  const renderAlarm = (al: ApiAlarm) => (
-    <Text key={al.id} style={{ marginLeft: 12 }}>
-      • {al.name} {al.dateStart ? `(${al.dateStart})` : ''}
-    </Text>
-  );
-
-  const renderGroup = ({ item }: { item: ApiGroup }) => (
-    <View style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: '#eee' }}>
-      <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{item.name}</Text>
-      <Text style={{ marginTop: 4 }}>
-        {item.owner ? 'Propietario' : 'Miembro'} {item.private ? '• Privado' : ''}
-      </Text>
-      <View style={{ marginTop: 6 }}>
-        {item.alarms?.length ? (
-          item.alarms.map(renderAlarm)
-        ) : (
-          <Text style={{ marginLeft: 12, fontStyle: 'italic' }}>Sin alarmas</Text>
-        )}
-      </View>
-    </View>
-  );
-
   // =======================
   // Render (un solo return)
-// =======================
+  // =======================
   return (
     <Screen>
       {/* Header */}
       <SafeArea style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
         <HeaderBar>
           <HeaderTitle>ALARMA</HeaderTitle>
-          <TrashButton onPress={() => { /* TODO: acción */ }}>
+          <TrashButton onPress={() => { /* TODO: acción o limpieza */ }}>
             <Ionicons name="trash-outline" size={37} color={BLUE} />
           </TrashButton>
         </HeaderBar>
       </SafeArea>
 
-      {/* Cards / contenido superior */}
-      <View style={{ flex: 1, paddingHorizontal: 12, paddingBottom: BAR_H + 90 }}>
-        <Text style={{ fontSize: 18, fontWeight: "600", marginVertical: 12 }}>
-          Hola, {snapshot.name || "usuario"}
-        </Text>
-
-        {/* Muestra todos los grupos */}
-        {snapshot.groups?.length ? (
-          snapshot.groups.map((group) => (
-            <View key={group.groupId} style={{ marginBottom: 16 }}>
-              <AlarmCard
-                groupLabel={group.name.toUpperCase()}
-                count={group.alarms?.length || 0}
-                statusText={
-                  group.alarms?.length
-                    ? `${group.alarms.length} alarma${group.alarms.length > 1 ? "s" : ""}`
-                    : "No hay alarmas"
-                }
-                onPress={() => {
-                  // Aquí podrías navegar o expandir detalle del grupo
-                  Alert.alert(`Grupo: ${group.name}`, `Contiene ${group.alarms.length} alarmas`);
+      {/* Lista con scroll */}
+      <FlatList
+        style={{ flex: 1 }}
+        data={snapshot.groups ?? []}
+        keyExtractor={(g) => String(g.groupId)}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: BAR_H + 90 }}
+        ListHeaderComponent={
+          <View style={{ paddingTop: 8, paddingBottom: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600', marginVertical: 12 }}>
+              Hola, {snapshot.name || 'usuario'}
+            </Text>
+          </View>
+        }
+        renderItem={({ item: group }) => {
+          const tint = normalizeHex(group.color) ?? BLUE;
+          return (
+            <View style={{ marginBottom: 16 }}>
+              <GroupCard
+                name={group.name}
+                tint={tint}
+                autoContrast
+                alarms={group.alarms || []}
+                initiallyOpen={true} // controlado por la flecha dentro del card
+                onToggleAlarm={(id, next) => {
+                  // TODO: llamar endpoint PATCH/PUT para activar/desactivar
+                  console.log('toggle', id, next);
+                }}
+                onEditAlarm={(id) => {
+                  // TODO: navigate a pantalla de edición
+                  console.log('edit', id);
+                }}
+                onDeleteAlarm={(id) => {
+                  // TODO: confirmar y llamar delete
+                  console.log('delete', id);
                 }}
               />
-
-              {/* Listado de alarmas dentro del grupo */}
-              {group.alarms?.length ? (
-                <View style={{ marginTop: 8, marginLeft: 8 }}>
-                  {group.alarms.map((alarm) => (
-                    <Text key={alarm.id} style={{ marginLeft: 8 }}>
-                      • {alarm.name} ({alarm.dateStart})
-                    </Text>
-                  ))}
-                </View>
-              ) : (
-                <Text style={{ marginLeft: 16, fontStyle: "italic", marginTop: 4 }}>
-                  Este grupo no tiene alarmas.
-                </Text>
-              )}
             </View>
-          ))
-        ) : (
-          !loading && (
+          );
+        }}
+        ListEmptyComponent={
+          !loading ? (
             <View style={{ padding: 20 }}>
-              <Text>No hay grupos disponibles.</Text>
+              <Text style={{ fontSize: 16 }}>Aún no tienes grupos.</Text>
+              <Text style={{ fontSize: 12, opacity: 0.7 }}>Crea uno con el botón +</Text>
             </View>
-          )
-        )}
-      </View>
+          ) : null
+        }
+      />
 
       {/* Modal de opciones */}
       <AddChooser

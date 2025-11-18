@@ -12,6 +12,7 @@ public class AlarmSummaryDto {
     private boolean alarm_type;
     private boolean active;
     private Integer cant;
+    private Integer interval_hours;
     private LocalTime time_alarm;
     private LocalDate date_start;
     private LocalDate date_end;

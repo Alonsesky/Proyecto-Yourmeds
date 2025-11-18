@@ -12,6 +12,23 @@ type Props = {
   statusText: string;
   onPress?: () => void;
   rightIcon?: keyof typeof Ionicons.glyphMap;
+
+  /** Nuevo: color de fondo/tinte del card y la cinta */
+  tint?: string;            // ej: "#FF9800"
+  /** Opcional: cambia texto/iconos a oscuro si el tinte es muy claro */
+  autoContrast?: boolean;   // default: false (para no alterar tu look actual)
+};
+
+/* helpers mínimos */
+const normalizeHex = (c?: string | null) =>
+  c && /^#[0-9A-Fa-f]{6}$/.test(c.trim()) ? c.trim() : null;
+
+const isLight = (hex: string) => {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  const y = 0.2126*(r/255) + 0.7152*(g/255) + 0.0722*(b/255);
+  return y > 0.7;
 };
 
 export default function AlarmCard({
@@ -20,12 +37,21 @@ export default function AlarmCard({
   statusText,
   onPress,
   rightIcon = 'chevron-down',
+  tint,
+  autoContrast = false,
 }: Props) {
+  const bg = normalizeHex(tint) ?? BLUE;
+
+  // Por defecto mantenemos todo en blanco (mismo look que antes).
+  // Si activas autoContrast y el bg es claro, usa texto/iconos oscuros.
+  const useDark = autoContrast && isLight(bg);
+  const FG = useDark ? '#0A2540' : WHITE;
+  const DIV = useDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.75)';
+
   return (
-    <Wrapper onPress={onPress} activeOpacity={0.9}>
+    <Wrapper onPress={onPress} activeOpacity={0.9} $bg={bg}>
       {/* ===== CINTA SUPERIOR ===== */}
       <RibbonWrap>
-        {/* Ajusta width/height si quieres el pico más corto/largo */}
         <RibbonSVG width={130} height={26} viewBox="0 0 130 26">
           {/*Modificación de barra Grupo Personal*/}
           <Path
@@ -39,34 +65,38 @@ export default function AlarmCard({
               Q 6 26 0 14
               Z
             "
-            fill={BLUE}
+            fill={bg}
           />
         </RibbonSVG>
 
-        <RibbonText numberOfLines={1}>{groupLabel}</RibbonText>
+        <RibbonText numberOfLines={1} style={{ color: useDark ? '#13314F' : '#E6F4FF' }}>
+          {groupLabel}
+        </RibbonText>
       </RibbonWrap>
 
       {/* ===== CONTENIDO TARJETA ===== */}
       <Row>
         <Left>
-          <Ionicons name="person-circle" size={36} color={WHITE} />
-          <CountText>{count}</CountText>
+          <Ionicons name="person-circle" size={36} color={FG} />
+          <CountText style={{ color: FG }}>{count}</CountText>
         </Left>
 
-        <Divider />
+        <Divider style={{ backgroundColor: DIV }} />
 
         <Middle>
           <Ionicons
             name="medkit-outline"
             size={18}
-            color={WHITE}
+            color={FG}
             style={{ marginRight: 8 }}
           />
-          <StatusText numberOfLines={1}>{statusText}</StatusText>
+          <StatusText numberOfLines={1} style={{ color: FG }}>
+            {statusText}
+          </StatusText>
         </Middle>
 
         <Right>
-          <Ionicons name={rightIcon} size={28} color={WHITE} />
+          <Ionicons name={rightIcon} size={28} color={FG} />
         </Right>
       </Row>
     </Wrapper>
@@ -75,8 +105,7 @@ export default function AlarmCard({
 
 /* ================= estilos ================= */
 
-const Wrapper = styled.TouchableOpacity({
-  backgroundColor: BLUE,
+const Wrapper = styled.TouchableOpacity<{ $bg: string }>({
   borderRadius: 16,
   paddingVertical: 14,
   paddingHorizontal: 16,
@@ -89,7 +118,9 @@ const Wrapper = styled.TouchableOpacity({
   elevation: 6,
   // para que la cinta pueda "salirse" sin ser cortada
   overflow: 'visible',
-});
+}, (p) => ({
+  backgroundColor: p.$bg,
+}));
 
 const RibbonWrap = styled.View({
   position: 'absolute',
@@ -106,7 +137,7 @@ const RibbonSVG = styled(Svg)({
 });
 
 const RibbonText = styled.Text({
-  color: '#E6F4FF',
+  // color dinámico arriba
   fontSize: 10,
   fontWeight: '700',
   letterSpacing: 0.6,
@@ -124,7 +155,7 @@ const Left = styled.View({
 });
 
 const CountText = styled.Text({
-  color: WHITE,
+  // color dinámico arriba
   fontSize: 28,
   fontWeight: '800',
   marginLeft: 8,
@@ -133,7 +164,7 @@ const CountText = styled.Text({
 const Divider = styled.View({
   width: 1,
   height: 40, // un poquito más alto como en el mock
-  backgroundColor: 'rgba(255,255,255,0.75)',
+  // color dinámico arriba
   marginHorizontal: 16,
 });
 
@@ -144,7 +175,7 @@ const Middle = styled.View({
 });
 
 const StatusText = styled.Text({
-  color: WHITE,
+  // color dinámico arriba
   fontSize: 14,
   fontWeight: '700',
 });

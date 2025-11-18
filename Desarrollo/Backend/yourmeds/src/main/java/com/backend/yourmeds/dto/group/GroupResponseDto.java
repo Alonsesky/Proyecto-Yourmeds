@@ -17,11 +17,11 @@ public class GroupResponseDto {
     private Long id;
     private String name;
     private Integer cant_users;
+    private String color;
     private Boolean is_private;
     private LocalDateTime create_at;
     private LocalDateTime updated_at;
     private Boolean isOwner;
-    private String color;
 
     public static GroupResponseDto from(Group g, boolean isOwner) {
         return GroupResponseDto.builder()
@@ -35,4 +35,5 @@ public class GroupResponseDto {
                 .color(g.getColor())
                 .build();
     }
+
 }
