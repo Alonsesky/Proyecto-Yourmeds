@@ -1,0 +1,37 @@
+version: '3.9'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: yourmeds-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: yourmeds_db        # <- NOMBRE BD (cámbialo si usas otro)
+      MYSQL_USER: yourmeds_user          # <- USUARIO APP
+      MYSQL_PASSWORD: yourmeds_pass      # <- PASS USUARIO
+      MYSQL_ROOT_PASSWORD: root_pass     # <- PASS ROOT
+    ports:
+      - "3307:3306"                      # Host:Contenedor (3307 en tu PC)
+    volumes:
+      - db_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile             # Usa tu Dockerfile actual
+    container_name: yourmeds-backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/yourmeds_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Santiago
+      SPRING_DATASOURCE_USERNAME: yourmeds_user
+      SPRING_DATASOURCE_PASSWORD: yourmeds_pass
+      # Si usas perfiles:
+      # SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"                      # Backend accesible en http://localhost:8080
+
+volumes:
+  db_data:
