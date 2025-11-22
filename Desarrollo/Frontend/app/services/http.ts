@@ -1,18 +1,31 @@
 import { NativeModules, Platform } from "react-native";
 import { getToken } from "./storage";
 
-// --- Ajusta si usas otro puerto ---
+// ---------------------------------------------
+// Configuración base
+// ---------------------------------------------
 const PORT = 8080;
 
-// (opcional) usa EXPO_PUBLIC_API_BASE si lo defines en EAS (sincronico)
+// Rellenar IP AZURE.
+// Si lo dejas vacío → usa autodescubrimiento normal.
+const FIXED_HOST = ""; // <-- MODIFICA AQUÍ CUANDO QUIERAS
+
+// (Opcional) ENV para producción en EAS
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
 
-// Detecta host una sola vez (sincrónico y muy rápido)
+// ---------------------------------------------
+// Descubrimiento automático de la IP
+// ---------------------------------------------
 function getAutoBase(): string {
-  // 1) Si viene por ENV, úsalo tal cual (puede traer http(s) y puerto)
+  // 0) Prioridad máxima: IP fija del usuario
+  if (FIXED_HOST.trim()) {
+    return buildBase(FIXED_HOST.trim());
+  }
+
+  // 1) ENV_BASE (ideal en producción)
   if (ENV_BASE) return ENV_BASE;
 
-  // 2) Intenta desde la URL del bundle (funciona en RN, Expo Dev Client)
+  // 2) Intentar obtener desde scriptURL (Expo / RN)
   try {
     const url: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
     if (url) {
@@ -22,20 +35,20 @@ function getAutoBase(): string {
     }
   } catch {}
 
-  // 3) RN web (si alguna vez corres en web)
+  // 3) Web (si llegas a usarlo)
   try {
     // @ts-ignore
     const host = typeof window !== "undefined" ? window.location?.hostname : "";
     if (host) return buildBase(normalizeHost(host));
   } catch {}
 
-  // 4) Fallbacks sensatos por plataforma
+  // 4) Fallback estándar
   const fallbackHost = Platform.OS === "ios" ? "localhost" : "10.0.2.2";
   return buildBase(fallbackHost);
 }
 
 function normalizeHost(host: string) {
-  // En emulador Android, "localhost" debe ser 10.0.2.2 para hablar con tu PC
+  // Android emulador especial
   if ((host === "localhost" || host === "127.0.0.1") && Platform.OS === "android") {
     return "10.0.2.2";
   }
@@ -43,15 +56,15 @@ function normalizeHost(host: string) {
 }
 
 function buildBase(host: string) {
-  // Si ENV_BASE no se usó, construimos http://host:PORT
-  // (si necesitas https en prod, define EXPO_PUBLIC_API_BASE)
   return `http://${host}:${PORT}`;
 }
 
-// ===== aquí queda tu base dinámica =====
+// Base dinámica final
 const API_URL = getAutoBase();
 
-// ==================== tu código original sigue igual ====================
+// ---------------------------------------------
+// HTTP Wrapper (tu implementación original)
+// ---------------------------------------------
 type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
 function isAuthPath(path: string) {
@@ -68,7 +81,7 @@ export async function http(path: string, options: Options = {}) {
     ...(options.headers || {}),
   };
 
-  // No se envía Authorization a /api/v1/auth/**
+  // No enviar Authorization en llamadas a /auth/**
   if (stored && !isAuthPath(path)) {
     const hasBearer = /^Bearer\s+/i.test(stored);
     headers.Authorization = hasBearer ? stored : `Bearer ${stored}`;
