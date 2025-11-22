@@ -1,0 +1,8 @@
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+
+# Copia cualquier jar del target
+COPY target/*.jar app_yourmeds.jar
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app_yourmeds.jar"]
