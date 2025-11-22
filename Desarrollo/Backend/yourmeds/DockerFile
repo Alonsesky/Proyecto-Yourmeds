@@ -1,8 +1,23 @@
-FROM openjdk:17-jdk-slim
+# ========== Etapa 1: Build con Maven ==========
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copia cualquier jar del target
-COPY target/*.jar app_yourmeds.jar
+# Copiamos pom y descargamos dependencias
+COPY pom.xml .
+RUN mvn -q -DskipTests dependency:go-offline
+
+# Copiamos el código fuente
+COPY src ./src
+
+# Compilamos el proyecto y generamos el .jar
+RUN mvn -q -DskipTests package
+
+# ========== Etapa 2: Imagen liviana para correr la app ==========
+FROM eclipse-temurin:17-jdk-jammy
+WORKDIR /app
+
+# Copiamos el jar generado desde la etapa de build
+COPY --from=build /app/target/*.jar app_yourmeds.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app_yourmeds.jar"]
