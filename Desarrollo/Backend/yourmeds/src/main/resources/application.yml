@@ -3,8 +3,8 @@ spring:
     name: yourmeds
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/yourmeds_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Santiago}
-    #url: ${SPRING_DATASOURCE_URL}
+    #url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/yourmeds_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Santiago}
+    url: jdbc:mysql://localhost:3306/yourmeds_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Santiago
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver

@@ -6,47 +6,18 @@ import { getToken } from "./storage";
 // ---------------------------------------------
 const PORT = 8080;
 
-// Rellenar IP AZURE.
-// Si lo dejas vacío → usa autodescubrimiento normal.
-const FIXED_HOST = ""; // <-- MODIFICA AQUÍ CUANDO QUIERAS
+// En release pon aquí tu backend real (LAN o Azure)
+// EJEMPLOS:
+// const FIXED_HOST = "192.168.0.15";
+// const FIXED_HOST = "20.xxx.xxx.xxx:8080";
+// const FIXED_HOST = "https://mi-backend-yourmeds.azurewebsites.net";
+const FIXED_HOST = "192.168.18.15";
 
-// (Opcional) ENV para producción en EAS
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
 
 // ---------------------------------------------
-// Descubrimiento automático de la IP
+// Helpers
 // ---------------------------------------------
-function getAutoBase(): string {
-  // 0) Prioridad máxima: IP fija del usuario
-  if (FIXED_HOST.trim()) {
-    return buildBase(FIXED_HOST.trim());
-  }
-
-  // 1) ENV_BASE (ideal en producción)
-  if (ENV_BASE) return ENV_BASE;
-
-  // 2) Intentar obtener desde scriptURL (Expo / RN)
-  try {
-    const url: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
-    if (url) {
-      const u = new URL(url);
-      const host = normalizeHost(u.hostname);
-      return buildBase(host);
-    }
-  } catch {}
-
-  // 3) Web (si llegas a usarlo)
-  try {
-    // @ts-ignore
-    const host = typeof window !== "undefined" ? window.location?.hostname : "";
-    if (host) return buildBase(normalizeHost(host));
-  } catch {}
-
-  // 4) Fallback estándar
-  const fallbackHost = Platform.OS === "ios" ? "localhost" : "10.0.2.2";
-  return buildBase(fallbackHost);
-}
-
 function normalizeHost(host: string) {
   // Android emulador especial
   if ((host === "localhost" || host === "127.0.0.1") && Platform.OS === "android") {
@@ -55,15 +26,68 @@ function normalizeHost(host: string) {
   return host || (Platform.OS === "ios" ? "localhost" : "10.0.2.2");
 }
 
-function buildBase(host: string) {
-  return `http://${host}:${PORT}`;
+function buildBase(hostOrUrl: string) {
+  const trimmed = hostOrUrl.trim();
+
+  // Si ya viene con http/https, lo usamos tal cual
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, ""); // sin barra al final
+  }
+
+  // Si viene en formato host:puerto, respetamos ese puerto
+  if (trimmed.includes(":")) {
+    return `http://${trimmed}`;
+  }
+
+  // Si es solo host, usamos PORT
+  return `http://${trimmed}:${PORT}`;
+}
+
+// ---------------------------------------------
+// Descubrimiento automático de la IP
+// ---------------------------------------------
+function getAutoBase(): string {
+  // 0) Si definiste FIXED_HOST, úsalo SIEMPRE (debug y release)
+  if (FIXED_HOST.trim()) {
+    return buildBase(FIXED_HOST);
+  }
+
+  // 1) ENV_BASE (ideal para producción tipo EAS)
+  if (ENV_BASE) return buildBase(ENV_BASE);
+
+  // 2) Solo usar scriptURL en modo desarrollo
+  if (__DEV__) {
+    try {
+      const url: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
+      if (url) {
+        const u = new URL(url);
+        const host = normalizeHost(u.hostname);
+        return buildBase(host);
+      }
+    } catch {
+      // ignorar
+    }
+  }
+
+  // 3) Web (si algún día lo usas)
+  try {
+    // @ts-ignore
+    const host = typeof window !== "undefined" ? window.location?.hostname : "";
+    if (host) return buildBase(normalizeHost(host));
+  } catch {
+    // ignorar
+  }
+
+  // 4) Fallback (pensado solo para desarrollo, emulador, etc.)
+  const fallbackHost = Platform.OS === "ios" ? "localhost" : "10.0.2.2";
+  return buildBase(fallbackHost);
 }
 
 // Base dinámica final
 const API_URL = getAutoBase();
 
 // ---------------------------------------------
-// HTTP Wrapper (tu implementación original)
+// HTTP Wrapper
 // ---------------------------------------------
 type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
 
