@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
@@ -143,6 +144,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // overlay de recarga manual
+  const [reloading, setReloading] = useState(false);
+
   // Estado panel de perfil
   const [profileVisible, setProfileVisible] = useState(false);
   const handleOpenProfile = useCallback(() => setProfileVisible(true), []);
@@ -169,11 +173,11 @@ export default function Home() {
   }, []);
 
   const confirmDelete = useCallback(async () => {
-  if (!delState.groupId || delState.alarmId == null) return;
+    if (!delState.groupId || delState.alarmId == null) return;
 
     try {
       // 1) Borrar en el backend
-      await deleteAlarm(delState.alarmId as number); // o ajusta el tipo en el service a number | string
+      await deleteAlarm(delState.alarmId as number);
 
       // 2) 🔔 Reprogramar todas las notificaciones según el estado actual
       try {
@@ -204,7 +208,6 @@ export default function Home() {
       setDelState((prev) => ({ ...prev, visible: false }));
     }
   }, [delState.groupId, delState.alarmId]);
-
 
   // ====== Estado para eliminar GRUPO ======
   const [groupDelVisible, setGroupDelVisible] = useState(false);
@@ -255,7 +258,7 @@ export default function Home() {
     if (cached?.data) setSnapshot(cached.data);
   }, []);
 
-  // 2) Refresca desde API (sin reentradas; maneja 401 limpiando sesión)
+  // 2) Refresca desde API
   const refreshFromAPI = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -278,7 +281,7 @@ export default function Home() {
     }
   }, [router]);
 
-  // 3) Enfocar Home: cache -> API (una vez por foco) + perfil
+  // 3) Enfocar Home
   useFocusEffect(
     useCallback(() => {
       async function load() {
@@ -286,7 +289,7 @@ export default function Home() {
           const id = await fetchMyId();
           if (!id) return;
 
-          // Perfil para saludo (solo nombre)
+          // Perfil para saludo
           try {
             const profile = await fetchMyProfile();
             setMe(profile ?? null);
@@ -315,12 +318,33 @@ export default function Home() {
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // NEW: calcula lista de grupos borrables (solo propietarios) y si el usuario tiene grupo propio
+  // Refresh manual con overlay + mínimo tiempo
+  const manualRefresh = useCallback(async () => {
+    if (reloading) return;
+    setReloading(true);
+
+    const start = Date.now();
+    setRefreshing(true);
+
+    try {
+      await refreshFromAPI();
+    } finally {
+      setRefreshing(false);
+      const elapsed = Date.now() - start;
+      const MIN_TIME = 1200;
+      if (elapsed < MIN_TIME) {
+        await new Promise((r) => setTimeout(r, MIN_TIME - elapsed));
+      }
+      setReloading(false);
+    }
+  }, [refreshFromAPI, reloading]);
+
+  // grupos borrables (dueño)
   const myId = snapshot.userId ?? null;
   const deletableGroups = (snapshot.groups || []).filter((g) => isOwner(g, myId));
   const hasOwnGroup = (snapshot.groups || []).some((g) => isOwner(g, myId));
 
-  // Handler del chooser: solo deja agregar ALARMA si hay grupo propio
+  // Handler del chooser
   const handlePick = useCallback(
     (type: 'alarm' | 'group') => {
       setChooserOpen(false);
@@ -346,14 +370,19 @@ export default function Home() {
   // =======================
   // Render
   // =======================
+  const greetingName = getFirstName(me) || snapshot.name || 'usuario';
+
   return (
     <Screen>
-      {/* Header */}
+      {/* Header con saludo + papelera */}
       <SafeArea
         style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}
       >
         <HeaderBar>
-          <HeaderTitle>ALARMA</HeaderTitle>
+          <HeaderLeft>
+            <GreetingHello>Hola,</GreetingHello>
+            <GreetingName>{greetingName}</GreetingName>
+          </HeaderLeft>
 
           <HeaderActions>
             <IconBtn onPress={() => setGroupDelVisible(true)}>
@@ -370,15 +399,11 @@ export default function Home() {
         keyExtractor={(g) => String(g.groupId)}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: BAR_H + 90 }}
-        ListHeaderComponent={
-          <GreetingWrap>
-            <GreetingHello>Hola,</GreetingHello>
-            <GreetingName>
-              {getFirstName(me) || snapshot.name || 'usuario'}
-            </GreetingName>
-          </GreetingWrap>
-        }
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          paddingBottom: BAR_H + 90,
+          paddingTop: 20,
+        }}
         renderItem={({ item: group }) => {
           const tint = normalizeHex(group.color) ?? BLUE;
 
@@ -388,6 +413,42 @@ export default function Home() {
           };
 
           const iAmOwner = isOwner(group, snapshot.userId);
+
+          // handler para salir del grupo (solo compartidos)
+          const handleLeave = !iAmOwner
+            ? () => {
+                Alert.alert(
+                  'Salir del grupo',
+                  `¿Seguro que quieres salir del grupo "${group.name}"?`,
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Salir',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          // TODO: aquí deberías llamar al endpoint real para salir del grupo
+                          // await leaveGroup(group.groupId);
+
+                          // Actualizar UI local
+                          setSnapshot((prev) => ({
+                            ...prev,
+                            groups: (prev.groups || []).filter(
+                              (g) => g.groupId !== group.groupId
+                            ),
+                          }));
+                        } catch (e: any) {
+                          Alert.alert(
+                            'Error',
+                            e?.message || 'No se pudo salir del grupo.'
+                          );
+                        }
+                      },
+                    },
+                  ]
+                );
+              }
+            : undefined;
 
           return (
             <View style={{ marginBottom: 16 }}>
@@ -423,6 +484,7 @@ export default function Home() {
                       }
                     : undefined
                 }
+                onLeaveGroup={handleLeave}   // ← aquí se activa el icono de salir para compartidos
               />
             </View>
           );
@@ -444,7 +506,7 @@ export default function Home() {
         visible={chooserOpen}
         onClose={() => setChooserOpen(false)}
         onPick={handlePick}
-        canAddAlarm={hasOwnGroup}        // <-- solo habilita ALARMA si hay grupo propio
+        canAddAlarm={hasOwnGroup}
       />
 
       {/* Modal de perfil de usuario */}
@@ -515,14 +577,16 @@ export default function Home() {
         />
 
         <BarContent>
-          <BarButton
-            onPress={() => {
-              /* ir a Alarmas */
-            }}
-          >
-            <Ionicons name="alarm-outline" size={26} color="#fff" />
+          {/* BOTÓN IZQUIERDO: REFRESH MANUAL CON OVERLAY */}
+          <BarButton onPress={reloading ? undefined : manualRefresh} disabled={reloading}>
+            {reloading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="alarm-outline" size={26} color="#fff" />
+            )}
           </BarButton>
 
+          {/* BOTÓN DERECHO: PERFIL */}
           <BarButton onPress={handleOpenProfile}>
             <Ionicons name="person-circle-outline" size={26} color="#fff" />
           </BarButton>
@@ -544,6 +608,16 @@ export default function Home() {
           <Ionicons name="add" size={28} color="#fff" />
         </FabSquare>
       </BottomWrap>
+
+      {/* Overlay de recarga manual */}
+      {reloading && (
+        <FullScreenLoader>
+          <LoaderCard>
+            <ActivityIndicator size="large" color={BLUE} />
+            <LoaderText>Actualizando alarmas...</LoaderText>
+          </LoaderCard>
+        </FullScreenLoader>
+      )}
     </Screen>
   );
 }
@@ -568,12 +642,9 @@ const HeaderBar = styled.View({
   paddingBottom: 8,
 });
 
-const HeaderTitle = styled.Text({
-  fontSize: 28,
-  color: BLUE,
-  fontFamily: 'Oswald-Bold',
-  letterSpacing: 1,
-  textTransform: 'uppercase',
+const HeaderLeft = styled.View({
+  flexDirection: 'column',
+  paddingTop: 10,
 });
 
 const HeaderActions = styled.View({
@@ -584,12 +655,6 @@ const HeaderActions = styled.View({
 const IconBtn = styled.TouchableOpacity({
   padding: 6,
   borderRadius: 12,
-});
-
-const GreetingWrap = styled.View({
-  paddingTop: 8,
-  paddingBottom: 20,
-  paddingHorizontal: 4,
 });
 
 const GreetingHello = styled.Text({
@@ -652,4 +717,33 @@ const FabSquare = styled.TouchableOpacity({
   backgroundColor: BLUE,
   alignItems: 'center',
   justifyContent: 'center',
+});
+
+const FullScreenLoader = styled.View({
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0,0,0,0.25)',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 999,
+});
+
+const LoaderCard = styled.View({
+  backgroundColor: '#ffffffff',
+  paddingVertical: 18,
+  paddingHorizontal: 24,
+  borderRadius: 40,
+  alignItems: 'center',
+  justifyContent: 'center',
+  opacity: 0.9,
+});
+
+const LoaderText = styled.Text({
+  marginTop: 10,
+  color: '#3077beff',
+  fontSize: 14,
+  fontWeight: '700',
 });

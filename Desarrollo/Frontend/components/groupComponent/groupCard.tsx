@@ -23,6 +23,8 @@ type Props = {
   onEditAlarm?: (alarmId: number) => void;
   onDeleteAlarm?: (alarmId: number) => void;
   canEdit?: boolean;
+  /** NUEVO: solo para usuarios compartidos, permite salir del grupo */
+  onLeaveGroup?: () => void;
 };
 
 const normalizeHex = (c?: string | null) =>
@@ -69,7 +71,8 @@ export default function GroupCard({
   onToggleAlarm,
   onEditAlarm,
   onDeleteAlarm,
-  canEdit = true,  
+  canEdit = true,
+  onLeaveGroup,                 // ← NUEVO
 }: Props) {
   const bg = normalizeHex(tint) ?? BLUE;
   const useDark = autoContrast && isLight(bg);
@@ -89,7 +92,7 @@ export default function GroupCard({
 
   return (
     <Wrapper $bg={bg} activeOpacity={0.9}>
-      {/* CINTA SUPERIOR: nombre del grupo dentro del área blanca, arriba-izquierda */}
+      {/* CINTA SUPERIOR */}
       <RibbonWrap>
         <RibbonSVG width={300} height={40} viewBox="0 0 300 35">
           <Path
@@ -97,13 +100,13 @@ export default function GroupCard({
             fill={tint}
             opacity={100}
           />
-          <RibbonText style={{ color: FG , paddingLeft:20, paddingBlock: 3 }} numberOfLines={1}>
+          <RibbonText style={{ color: FG, paddingLeft: 20, paddingBlock: 3 }} numberOfLines={1}>
             {name?.toUpperCase()}
           </RibbonText>
         </RibbonSVG>
       </RibbonWrap>
 
-      {/* HEADER: contador, estado, flecha colapsable */}
+      {/* HEADER */}
       <Header>
         <Left>
           <Ionicons name="person-outline" size={22} color={FG} />
@@ -115,14 +118,27 @@ export default function GroupCard({
           <StatusText style={{ color: FG, marginLeft: 8 }}>{statusText}</StatusText>
         </Middle>
 
-        <Pressable onPress={toggleOpen} hitSlop={10} accessibilityLabel="Abrir/cerrar grupo">
-          <Ionicons
-            name="chevron-down"
-            size={26}
-            color={FG}
-            style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}
-          />
-        </Pressable>
+        <HeaderRight>
+          {/* Botón “salir del grupo” SOLO si viene la prop */}
+          {onLeaveGroup && (
+            <>
+              <LeaveBtn onPress={onLeaveGroup} hitSlop={10}>
+                <Ionicons name="exit-outline" size={20} color={FG} />
+              </LeaveBtn>
+              <VerticalDivider style={{ backgroundColor: DIV }} />
+            </>
+          )}
+
+          {/* Flecha abrir/cerrar */}
+          <Pressable onPress={toggleOpen} hitSlop={10} accessibilityLabel="Abrir/cerrar grupo">
+            <Ionicons
+              name="chevron-down"
+              size={26}
+              color={FG}
+              style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}
+            />
+          </Pressable>
+        </HeaderRight>
       </Header>
 
       {/* CONTENIDO: lista de alarmas */}
@@ -137,11 +153,9 @@ export default function GroupCard({
               let freq = '';
 
               if (a.alarm_type === false) {
-                // FIJO: permanente sin rango visible
                 freq = 'CADA DÍA';
-                range = 'Todos los días'; // ocultamos fechas
+                range = 'Todos los días';
               } else {
-                // VARIADO: mostrar rango + "CADA X H" si viene
                 range = shortRange(a.date_start, a.date_end);
                 freq = a.interval_hours ? `CADA ${a.interval_hours} H` : 'CADA DÍA';
               }
@@ -168,7 +182,7 @@ export default function GroupCard({
                     <RightCol style={{ marginLeft: 1 }}>
                       <Switch
                         value={!!a.active}
-                        disabled={!canEdit}                               // NUEVO: deshabilita switch
+                        disabled={!canEdit}
                         onValueChange={(next) => {
                           if (!canEdit) return;
                           onToggleAlarm?.(a.id, next);
@@ -177,7 +191,6 @@ export default function GroupCard({
                         thumbColor={WHITE}
                       />
 
-                      {/* BOTONES SOLO PARA DUEÑOS */}
                       {canEdit && (
                         <RowActions>
                           <IconBtn onPress={() => onDeleteAlarm?.(a.id)}>
@@ -202,18 +215,21 @@ export default function GroupCard({
 
 /* ===== estilos ===== */
 
-const Wrapper = styled.TouchableOpacity<{ $bg: string }>({
-  borderRadius: 16,
-  paddingVertical: 14,
-  paddingHorizontal: 16,
-  marginBottom: 16,
-  shadowColor: '#000',
-  shadowOpacity: 0.18,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 6,
-  overflow: 'visible',
-}, (p) => ({ backgroundColor: p.$bg }));
+const Wrapper = styled.TouchableOpacity<{ $bg: string }>(
+  {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+    overflow: 'visible',
+  },
+  (p) => ({ backgroundColor: p.$bg })
+);
 
 const RibbonWrap = styled.View({
   position: 'absolute',
@@ -236,7 +252,6 @@ const RibbonText = styled.Text({
 const Header = styled.View({
   flexDirection: 'row',
   alignItems: 'center',
-  gap: 12,
   minHeight: 42,
 });
 
@@ -244,6 +259,26 @@ const Left = styled.View({ flexDirection: 'row', alignItems: 'center' });
 const CountText = styled.Text({ fontSize: 18, fontWeight: '700' });
 const Middle = styled.View({ flex: 1, flexDirection: 'row', alignItems: 'center' });
 const StatusText = styled.Text({ fontSize: 14, fontWeight: '700' });
+
+/** NUEVO: contenedor derecha del header */
+const HeaderRight = styled.View({
+  flexDirection: 'row',
+  alignItems: 'center',
+});
+
+/** NUEVO: botón salir del grupo */
+const LeaveBtn = styled.TouchableOpacity({
+  paddingHorizontal: 6,
+  paddingVertical: 4,
+  marginRight: 4,
+});
+
+/** NUEVO: línea vertical separadora */
+const VerticalDivider = styled.View({
+  width: 1,
+  height: 20,
+  marginRight: 6,
+});
 
 const EmptyText = styled.Text({ fontSize: 13, fontStyle: 'italic' });
 
