@@ -11,10 +11,9 @@ const PORT = 8080;
 // const FIXED_HOST = "192.168.0.15";
 // const FIXED_HOST = "20.xxx.xxx.xxx:8080";
 // const FIXED_HOST = "https://mi-backend-yourmeds.azurewebsites.net";
-const FIXED_HOST = "192.168.18.15";
+const FIXED_HOST = "192.168.18.251";
 
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
-
 // ---------------------------------------------
 // Helpers
 // ---------------------------------------------
@@ -96,6 +95,18 @@ function isAuthPath(path: string) {
   return pathname.startsWith("/api/v1/auth/");
 }
 
+// Error HTTP tipado
+export class HttpError extends Error {
+  status: number;
+  body: any;
+
+  constructor(status: number, message: string, body: any) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function http(path: string, options: Options = {}) {
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
   const stored = await getToken();
@@ -113,11 +124,31 @@ export async function http(path: string, options: Options = {}) {
 
   const res = await fetch(url, { ...options, headers });
 
+  const ct = res.headers.get("content-type") || "";
+  const isJson = ct.includes("application/json");
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
+    let body: any = null;
+
+    if (isJson) {
+      body = await res.json().catch(() => null);
+    } else {
+      const text = await res.text().catch(() => "");
+      body = text;
+    }
+
+    const backendMsg =
+      body && typeof body === "object" && "message" in body
+        ? String((body as any).message)
+        : "";
+
+    const msg = backendMsg || `HTTP ${res.status}`;
+    throw new HttpError(res.status, msg, body);
   }
 
-  const ct = res.headers.get("content-type") || "";
-  return ct.includes("application/json") ? res.json() : res.text();
+  if (isJson) {
+    return res.json();
+  }
+  return res.text();
 }
+
