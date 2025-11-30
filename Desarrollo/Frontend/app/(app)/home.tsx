@@ -21,13 +21,14 @@ import styled from 'styled-components/native';
 import ConfirmDeleteAlarmModal from '@/components/deleteComponent/confirmDelete';
 import GroupDeleteOverlay from '@/components/deleteComponent/deleteGroup';
 import GroupCard from '@/components/groupComponent/groupCard';
+import LeaveGroupConfirmModal from '@/components/groupComponent/leaveGroup';
 import ProfileUser from '@/components/profileComponent/profileUser';
 import SesionCloseModal from '@/components/sesionClose/sesionClose';
 import AddChooser from '../../components/AddChoose';
 
 import { scheduleAll } from '../notifications/scheduler';
 import { deleteAlarm, getAlarmsFromStorageOrApi } from '../services/alarm';
-import { deleteGroup, fetchMyGroupsAndAlarms } from '../services/group';
+import { deleteGroup, fetchMyGroupsAndAlarms, leaveGroup } from '../services/group';
 import {
   clearToken,
   getGroupsSnapshot,
@@ -125,6 +126,35 @@ const isOwner = (g: any, myId: string | number) => {
   return false;
 };
 
+// intentar obtener la cantidad de usuarios del grupo desde distintas propiedades
+const getMembersCount = (g: any): number => {
+  // arrays de miembros
+  if (Array.isArray(g.members)) return g.members.length;
+  if (Array.isArray(g.users)) return g.users.length;
+  if (Array.isArray(g.userList)) return g.userList.length;
+  if (Array.isArray(g.memberships)) return g.memberships.length;
+
+  // campos numéricos posibles
+  const numericCandidates = [
+    g.membersCount,
+    g.memberCount,
+    g.usersCount,
+    g.userCount,
+    g.countUsers,
+    g.count_members,
+    g.totalMembers,
+  ];
+
+  for (const c of numericCandidates) {
+    if (typeof c === 'number' && !Number.isNaN(c)) {
+      return c;
+    }
+  }
+
+  // fallback mínimo: al menos el dueño
+  return 1;
+};
+
 // =======================
 // Componente
 // =======================
@@ -146,6 +176,14 @@ export default function Home() {
 
   // overlay de recarga manual
   const [reloading, setReloading] = useState(false);
+
+  // estado para salir de grupo (card)
+  const [leaveState, setLeaveState] = useState<{
+    visible: boolean;
+    groupId?: number;
+    groupName?: string;
+    loading?: boolean;
+  }>({ visible: false, loading: false });
 
   // Estado panel de perfil
   const [profileVisible, setProfileVisible] = useState(false);
@@ -367,6 +405,36 @@ export default function Home() {
     [router, snapshot]
   );
 
+  // ===== abandonar grupo (card) =====
+  const openLeaveModal = useCallback((groupId: number, groupName: string) => {
+    setLeaveState({ visible: true, groupId, groupName, loading: false });
+  }, []);
+
+  const cancelLeave = useCallback(() => {
+    setLeaveState((s) => ({ ...s, visible: false, loading: false }));
+  }, []);
+
+  const confirmLeave = useCallback(async () => {
+    if (!leaveState.groupId) return;
+    try {
+      setLeaveState((s) => ({ ...s, loading: true }));
+
+      const uid = snapshot.userId || (await fetchMyId());
+      await leaveGroup(leaveState.groupId as number, uid as number);
+
+      // quitar el grupo localmente
+      setSnapshot((prev) => ({
+        ...prev,
+        groups: (prev.groups || []).filter((g) => g.groupId !== leaveState.groupId),
+      }));
+
+      setLeaveState({ visible: false, loading: false, groupId: undefined, groupName: undefined });
+    } catch (e: any) {
+      setLeaveState((s) => ({ ...s, loading: false }));
+      Alert.alert('Error', e?.message || 'No se pudo salir del grupo.');
+    }
+  }, [leaveState.groupId, snapshot.userId]);
+
   // =======================
   // Render
   // =======================
@@ -413,42 +481,24 @@ export default function Home() {
           };
 
           const iAmOwner = isOwner(group, snapshot.userId);
+          const membersCount = getMembersCount(group);
 
-          // handler para salir del grupo (solo compartidos)
-          const handleLeave = !iAmOwner
-            ? () => {
-                Alert.alert(
-                  'Salir del grupo',
-                  `¿Seguro que quieres salir del grupo "${group.name}"?`,
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Salir',
-                      style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          // TODO: aquí deberías llamar al endpoint real para salir del grupo
-                          // await leaveGroup(group.groupId);
+          // compartido → puede salirse
+          const handleLeave =
+            !iAmOwner
+              ? () => openLeaveModal(group.groupId as number, group.name)
+              : undefined;
 
-                          // Actualizar UI local
-                          setSnapshot((prev) => ({
-                            ...prev,
-                            groups: (prev.groups || []).filter(
-                              (g) => g.groupId !== group.groupId
-                            ),
-                          }));
-                        } catch (e: any) {
-                          Alert.alert(
-                            'Error',
-                            e?.message || 'No se pudo salir del grupo.'
-                          );
-                        }
-                      },
-                    },
-                  ]
-                );
-              }
-            : undefined;
+          // dueño → puede editar grupo
+          const handleEditGroup =
+            iAmOwner
+              ? () => {
+                  router.push({
+                    pathname: '../(group)/group',
+                    params: { groupId: String(group.groupId) },
+                  });
+                }
+              : undefined;
 
           return (
             <View style={{ marginBottom: 16 }}>
@@ -459,6 +509,7 @@ export default function Home() {
                 alarms={group.alarms || []}
                 initiallyOpen={true}
                 canEdit={iAmOwner}
+                membersCount={membersCount}
                 onToggleAlarm={
                   iAmOwner
                     ? (id, next) => {
@@ -484,7 +535,8 @@ export default function Home() {
                       }
                     : undefined
                 }
-                onLeaveGroup={handleLeave}   // ← aquí se activa el icono de salir para compartidos
+                onLeaveGroup={handleLeave}       // sólo compartidos
+                onEditGroup={handleEditGroup}   // sólo dueños
               />
             </View>
           );
@@ -531,6 +583,15 @@ export default function Home() {
         loading={!!delState.loading}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+
+      {/* Modal de salir del grupo (compartido) */}
+      <LeaveGroupConfirmModal
+        visible={leaveState.visible}
+        groupName={leaveState.groupName || ''}
+        loading={!!leaveState.loading}
+        onCancel={cancelLeave}
+        onConfirm={confirmLeave}
       />
 
       {/* Overlay seleccionar y borrar GRUPO */}

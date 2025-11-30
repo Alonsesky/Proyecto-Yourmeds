@@ -11,7 +11,7 @@ const PORT = 8080;
 // const FIXED_HOST = "192.168.0.15";
 // const FIXED_HOST = "20.xxx.xxx.xxx:8080";
 // const FIXED_HOST = "https://mi-backend-yourmeds.azurewebsites.net";
-const FIXED_HOST = "10.34.245.128";
+const FIXED_HOST = "192.168.18.251";
 
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
 // ---------------------------------------------

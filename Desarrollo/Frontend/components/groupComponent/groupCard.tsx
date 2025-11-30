@@ -23,18 +23,20 @@ type Props = {
   onEditAlarm?: (alarmId: number) => void;
   onDeleteAlarm?: (alarmId: number) => void;
   canEdit?: boolean;
-  /** NUEVO: solo para usuarios compartidos, permite salir del grupo */
-  onLeaveGroup?: () => void;
+  onLeaveGroup?: () => void;   // compartidos
+  onEditGroup?: () => void;    // dueños
+  /** cantidad de usuarios del grupo (dueño + miembros) */
+  membersCount?: number;
 };
 
 const normalizeHex = (c?: string | null) =>
   c && /^#[0-9A-Fa-f]{6}$/.test(c.trim()) ? c.trim() : null;
 
 const isLight = (hex: string) => {
-  const r = parseInt(hex.slice(1,3), 16);
-  const g = parseInt(hex.slice(3,5), 16);
-  const b = parseInt(hex.slice(5,7), 16);
-  const y = 0.2126*(r/255) + 0.7152*(g/255) + 0.0722*(b/255);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const y = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
   return y > 0.7;
 };
 
@@ -44,7 +46,8 @@ function to12h(hhmmss?: string) {
   let h = Number(hStr);
   const m = Number(mStr);
   const am = h < 12;
-  if (h === 0) h = 12; else if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(h)}:${pad(m)} ${am ? 'AM' : 'PM'}`;
 }
@@ -57,7 +60,8 @@ function shortRange(d1?: string, d2?: string) {
     const mes = d.toLocaleString('es-CL', { month: 'short' });
     return `${dia} ${mes.charAt(0).toUpperCase()}${mes.slice(1)}`;
   };
-  const a = fmt(d1), b = fmt(d2);
+  const a = fmt(d1),
+    b = fmt(d2);
   return a && b ? `${a} - ${b}` : a || b || '';
 }
 
@@ -72,7 +76,9 @@ export default function GroupCard({
   onEditAlarm,
   onDeleteAlarm,
   canEdit = true,
-  onLeaveGroup,                 // ← NUEVO
+  onLeaveGroup,
+  onEditGroup,
+  membersCount,
 }: Props) {
   const bg = normalizeHex(tint) ?? BLUE;
   const useDark = autoContrast && isLight(bg);
@@ -81,14 +87,24 @@ export default function GroupCard({
 
   const [open, setOpen] = useState(initiallyOpen);
 
-  const count = alarms?.length ?? 0;
-  const statusText = count ? `${count} alarma${count > 1 ? 's' : ''}` : 'No hay alarmas';
+  // usuarios vs alarmas
+  const users = typeof membersCount === 'number' ? membersCount : 0;
+  const alarmsCount = alarms?.length ?? 0;
+  const statusText = alarmsCount
+    ? `${alarmsCount} alarma${alarmsCount > 1 ? 's' : ''}`
+    : 'No hay alarmas';
 
   const toggleOpen = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpen((v) => !v);
     onPressHeader?.();
   };
+
+  // acción de header (solo una)
+  const hasLeave = !!onLeaveGroup;
+  const hasEditGroup = !!onEditGroup;
+  const headerAction = hasLeave ? onLeaveGroup : hasEditGroup ? onEditGroup : undefined;
+  const headerIconName = hasLeave ? 'exit-outline' : hasEditGroup ? 'create-outline' : undefined;
 
   return (
     <Wrapper $bg={bg} activeOpacity={0.9}>
@@ -110,7 +126,7 @@ export default function GroupCard({
       <Header>
         <Left>
           <Ionicons name="person-outline" size={22} color={FG} />
-          <CountText style={{ color: FG }}> {count || 0}</CountText>
+          <CountText style={{ color: FG }}> {users}</CountText>
         </Left>
 
         <Middle>
@@ -119,17 +135,17 @@ export default function GroupCard({
         </Middle>
 
         <HeaderRight>
-          {/* Botón “salir del grupo” SOLO si viene la prop */}
-          {onLeaveGroup && (
+          {headerAction && headerIconName && (
             <>
-              <LeaveBtn onPress={onLeaveGroup} hitSlop={10}>
-                <Ionicons name="exit-outline" size={20} color={FG} />
-              </LeaveBtn>
-              <VerticalDivider style={{ backgroundColor: DIV }} />
+              <HeaderIconBtn onPress={headerAction} hitSlop={8}>
+                <Ionicons name={headerIconName} size={22} color={FG} />
+              </HeaderIconBtn>
+
+              {/* la línea usa el mismo color FG con algo de transparencia */}
+              <HeaderDivider style={{ backgroundColor: FG, opacity: 0.55 }} />
             </>
           )}
 
-          {/* Flecha abrir/cerrar */}
           <Pressable onPress={toggleOpen} hitSlop={10} accessibilityLabel="Abrir/cerrar grupo">
             <Ionicons
               name="chevron-down"
@@ -144,7 +160,7 @@ export default function GroupCard({
       {/* CONTENIDO: lista de alarmas */}
       {open && (
         <View style={{ marginTop: 6 }}>
-          {count === 0 ? (
+          {alarmsCount === 0 ? (
             <EmptyText style={{ color: FG, opacity: 0.9 }}>Sin alarmas</EmptyText>
           ) : (
             alarms.map((a) => {
@@ -164,7 +180,6 @@ export default function GroupCard({
                 <AlarmRow key={a.id}>
                   <AlarmLeft>
                     <Ionicons name="medkit-outline" size={16} color={FG} />
-
                     <NameTime>
                       <AlarmName style={{ color: FG }}>{a.name}</AlarmName>
                       <AlarmTime style={{ color: FG }}>{time}</AlarmTime>
@@ -252,6 +267,7 @@ const RibbonText = styled.Text({
 const Header = styled.View({
   flexDirection: 'row',
   alignItems: 'center',
+  gap: 12,
   minHeight: 42,
 });
 
@@ -260,24 +276,21 @@ const CountText = styled.Text({ fontSize: 18, fontWeight: '700' });
 const Middle = styled.View({ flex: 1, flexDirection: 'row', alignItems: 'center' });
 const StatusText = styled.Text({ fontSize: 14, fontWeight: '700' });
 
-/** NUEVO: contenedor derecha del header */
 const HeaderRight = styled.View({
   flexDirection: 'row',
   alignItems: 'center',
+  height: 26,
 });
 
-/** NUEVO: botón salir del grupo */
-const LeaveBtn = styled.TouchableOpacity({
-  paddingHorizontal: 6,
-  paddingVertical: 4,
-  marginRight: 4,
-});
-
-/** NUEVO: línea vertical separadora */
-const VerticalDivider = styled.View({
+const HeaderDivider = styled.View({
   width: 1,
   height: 20,
-  marginRight: 6,
+  alignSelf: 'center',
+  marginHorizontal: 8,
+});
+
+const HeaderIconBtn = styled.TouchableOpacity({
+  paddingHorizontal: 2,
 });
 
 const EmptyText = styled.Text({ fontSize: 13, fontStyle: 'italic' });
@@ -338,7 +351,10 @@ const RangeText = styled.Text({
   opacity: 0.9,
 });
 
-const FreqText = styled.Text({ fontSize: 15, fontWeight: '900' });
+const FreqText = styled.Text({
+  fontSize: 15,
+  fontWeight: '900',
+});
 
 const RowActions = styled.View({
   flexDirection: 'row',
