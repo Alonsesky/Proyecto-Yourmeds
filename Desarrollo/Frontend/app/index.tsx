@@ -81,11 +81,6 @@ export default function IndexScreen() {
       >
         <Text style={styles.buttonText}>Empezar</Text>
       </TouchableOpacity>
-
-      {/* Botón de prueba rápida (10s) */}
-      <TouchableOpacity style={styles.secondaryButton} onPress={testLocal10s}>
-        <Text style={styles.secondaryText}>Probar notificación (10s)</Text>
-      </TouchableOpacity>
     </View>
   );
 }

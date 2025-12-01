@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
@@ -20,13 +21,14 @@ import styled from 'styled-components/native';
 import ConfirmDeleteAlarmModal from '@/components/deleteComponent/confirmDelete';
 import GroupDeleteOverlay from '@/components/deleteComponent/deleteGroup';
 import GroupCard from '@/components/groupComponent/groupCard';
+import LeaveGroupConfirmModal from '@/components/groupComponent/leaveGroup';
 import ProfileUser from '@/components/profileComponent/profileUser';
 import SesionCloseModal from '@/components/sesionClose/sesionClose';
 import AddChooser from '../../components/AddChoose';
 
 import { scheduleAll } from '../notifications/scheduler';
 import { deleteAlarm, getAlarmsFromStorageOrApi } from '../services/alarm';
-import { deleteGroup, fetchMyGroupsAndAlarms } from '../services/group';
+import { deleteGroup, fetchMyGroupsAndAlarms, leaveGroup } from '../services/group';
 import {
   clearToken,
   getGroupsSnapshot,
@@ -124,6 +126,35 @@ const isOwner = (g: any, myId: string | number) => {
   return false;
 };
 
+// intentar obtener la cantidad de usuarios del grupo desde distintas propiedades
+const getMembersCount = (g: any): number => {
+  // arrays de miembros
+  if (Array.isArray(g.members)) return g.members.length;
+  if (Array.isArray(g.users)) return g.users.length;
+  if (Array.isArray(g.userList)) return g.userList.length;
+  if (Array.isArray(g.memberships)) return g.memberships.length;
+
+  // campos numéricos posibles
+  const numericCandidates = [
+    g.membersCount,
+    g.memberCount,
+    g.usersCount,
+    g.userCount,
+    g.countUsers,
+    g.count_members,
+    g.totalMembers,
+  ];
+
+  for (const c of numericCandidates) {
+    if (typeof c === 'number' && !Number.isNaN(c)) {
+      return c;
+    }
+  }
+
+  // fallback mínimo: al menos el dueño
+  return 1;
+};
+
 // =======================
 // Componente
 // =======================
@@ -142,6 +173,17 @@ export default function Home() {
   const [me, setMe] = useState<MeProfile | null>(null); // perfil para saludo
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // overlay de recarga manual
+  const [reloading, setReloading] = useState(false);
+
+  // estado para salir de grupo (card)
+  const [leaveState, setLeaveState] = useState<{
+    visible: boolean;
+    groupId?: number;
+    groupName?: string;
+    loading?: boolean;
+  }>({ visible: false, loading: false });
 
   // Estado panel de perfil
   const [profileVisible, setProfileVisible] = useState(false);
@@ -169,11 +211,11 @@ export default function Home() {
   }, []);
 
   const confirmDelete = useCallback(async () => {
-  if (!delState.groupId || delState.alarmId == null) return;
+    if (!delState.groupId || delState.alarmId == null) return;
 
     try {
       // 1) Borrar en el backend
-      await deleteAlarm(delState.alarmId as number); // o ajusta el tipo en el service a number | string
+      await deleteAlarm(delState.alarmId as number);
 
       // 2) 🔔 Reprogramar todas las notificaciones según el estado actual
       try {
@@ -204,7 +246,6 @@ export default function Home() {
       setDelState((prev) => ({ ...prev, visible: false }));
     }
   }, [delState.groupId, delState.alarmId]);
-
 
   // ====== Estado para eliminar GRUPO ======
   const [groupDelVisible, setGroupDelVisible] = useState(false);
@@ -255,7 +296,7 @@ export default function Home() {
     if (cached?.data) setSnapshot(cached.data);
   }, []);
 
-  // 2) Refresca desde API (sin reentradas; maneja 401 limpiando sesión)
+  // 2) Refresca desde API
   const refreshFromAPI = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -278,7 +319,7 @@ export default function Home() {
     }
   }, [router]);
 
-  // 3) Enfocar Home: cache -> API (una vez por foco) + perfil
+  // 3) Enfocar Home
   useFocusEffect(
     useCallback(() => {
       async function load() {
@@ -286,7 +327,7 @@ export default function Home() {
           const id = await fetchMyId();
           if (!id) return;
 
-          // Perfil para saludo (solo nombre)
+          // Perfil para saludo
           try {
             const profile = await fetchMyProfile();
             setMe(profile ?? null);
@@ -315,12 +356,33 @@ export default function Home() {
     setRefreshing(false);
   }, [refreshFromAPI]);
 
-  // NEW: calcula lista de grupos borrables (solo propietarios) y si el usuario tiene grupo propio
+  // Refresh manual con overlay + mínimo tiempo
+  const manualRefresh = useCallback(async () => {
+    if (reloading) return;
+    setReloading(true);
+
+    const start = Date.now();
+    setRefreshing(true);
+
+    try {
+      await refreshFromAPI();
+    } finally {
+      setRefreshing(false);
+      const elapsed = Date.now() - start;
+      const MIN_TIME = 1200;
+      if (elapsed < MIN_TIME) {
+        await new Promise((r) => setTimeout(r, MIN_TIME - elapsed));
+      }
+      setReloading(false);
+    }
+  }, [refreshFromAPI, reloading]);
+
+  // grupos borrables (dueño)
   const myId = snapshot.userId ?? null;
   const deletableGroups = (snapshot.groups || []).filter((g) => isOwner(g, myId));
   const hasOwnGroup = (snapshot.groups || []).some((g) => isOwner(g, myId));
 
-  // Handler del chooser: solo deja agregar ALARMA si hay grupo propio
+  // Handler del chooser
   const handlePick = useCallback(
     (type: 'alarm' | 'group') => {
       setChooserOpen(false);
@@ -343,17 +405,52 @@ export default function Home() {
     [router, snapshot]
   );
 
+  // ===== abandonar grupo (card) =====
+  const openLeaveModal = useCallback((groupId: number, groupName: string) => {
+    setLeaveState({ visible: true, groupId, groupName, loading: false });
+  }, []);
+
+  const cancelLeave = useCallback(() => {
+    setLeaveState((s) => ({ ...s, visible: false, loading: false }));
+  }, []);
+
+  const confirmLeave = useCallback(async () => {
+    if (!leaveState.groupId) return;
+    try {
+      setLeaveState((s) => ({ ...s, loading: true }));
+
+      const uid = snapshot.userId || (await fetchMyId());
+      await leaveGroup(leaveState.groupId as number, uid as number);
+
+      // quitar el grupo localmente
+      setSnapshot((prev) => ({
+        ...prev,
+        groups: (prev.groups || []).filter((g) => g.groupId !== leaveState.groupId),
+      }));
+
+      setLeaveState({ visible: false, loading: false, groupId: undefined, groupName: undefined });
+    } catch (e: any) {
+      setLeaveState((s) => ({ ...s, loading: false }));
+      Alert.alert('Error', e?.message || 'No se pudo salir del grupo.');
+    }
+  }, [leaveState.groupId, snapshot.userId]);
+
   // =======================
   // Render
   // =======================
+  const greetingName = getFirstName(me) || snapshot.name || 'usuario';
+
   return (
     <Screen>
-      {/* Header */}
+      {/* Header con saludo + papelera */}
       <SafeArea
         style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}
       >
         <HeaderBar>
-          <HeaderTitle>ALARMA</HeaderTitle>
+          <HeaderLeft>
+            <GreetingHello>Hola,</GreetingHello>
+            <GreetingName>{greetingName}</GreetingName>
+          </HeaderLeft>
 
           <HeaderActions>
             <IconBtn onPress={() => setGroupDelVisible(true)}>
@@ -370,15 +467,11 @@ export default function Home() {
         keyExtractor={(g) => String(g.groupId)}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: BAR_H + 90 }}
-        ListHeaderComponent={
-          <GreetingWrap>
-            <GreetingHello>Hola,</GreetingHello>
-            <GreetingName>
-              {getFirstName(me) || snapshot.name || 'usuario'}
-            </GreetingName>
-          </GreetingWrap>
-        }
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          paddingBottom: BAR_H + 90,
+          paddingTop: 20,
+        }}
         renderItem={({ item: group }) => {
           const tint = normalizeHex(group.color) ?? BLUE;
 
@@ -388,6 +481,24 @@ export default function Home() {
           };
 
           const iAmOwner = isOwner(group, snapshot.userId);
+          const membersCount = getMembersCount(group);
+
+          // compartido → puede salirse
+          const handleLeave =
+            !iAmOwner
+              ? () => openLeaveModal(group.groupId as number, group.name)
+              : undefined;
+
+          // dueño → puede editar grupo
+          const handleEditGroup =
+            iAmOwner
+              ? () => {
+                  router.push({
+                    pathname: '../(group)/group',
+                    params: { groupId: String(group.groupId) },
+                  });
+                }
+              : undefined;
 
           return (
             <View style={{ marginBottom: 16 }}>
@@ -398,6 +509,7 @@ export default function Home() {
                 alarms={group.alarms || []}
                 initiallyOpen={true}
                 canEdit={iAmOwner}
+                membersCount={membersCount}
                 onToggleAlarm={
                   iAmOwner
                     ? (id, next) => {
@@ -423,6 +535,8 @@ export default function Home() {
                       }
                     : undefined
                 }
+                onLeaveGroup={handleLeave}       // sólo compartidos
+                onEditGroup={handleEditGroup}   // sólo dueños
               />
             </View>
           );
@@ -444,7 +558,7 @@ export default function Home() {
         visible={chooserOpen}
         onClose={() => setChooserOpen(false)}
         onPick={handlePick}
-        canAddAlarm={hasOwnGroup}        // <-- solo habilita ALARMA si hay grupo propio
+        canAddAlarm={hasOwnGroup}
       />
 
       {/* Modal de perfil de usuario */}
@@ -469,6 +583,15 @@ export default function Home() {
         loading={!!delState.loading}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+
+      {/* Modal de salir del grupo (compartido) */}
+      <LeaveGroupConfirmModal
+        visible={leaveState.visible}
+        groupName={leaveState.groupName || ''}
+        loading={!!leaveState.loading}
+        onCancel={cancelLeave}
+        onConfirm={confirmLeave}
       />
 
       {/* Overlay seleccionar y borrar GRUPO */}
@@ -515,14 +638,16 @@ export default function Home() {
         />
 
         <BarContent>
-          <BarButton
-            onPress={() => {
-              /* ir a Alarmas */
-            }}
-          >
-            <Ionicons name="alarm-outline" size={26} color="#fff" />
+          {/* BOTÓN IZQUIERDO: REFRESH MANUAL CON OVERLAY */}
+          <BarButton onPress={reloading ? undefined : manualRefresh} disabled={reloading}>
+            {reloading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="alarm-outline" size={26} color="#fff" />
+            )}
           </BarButton>
 
+          {/* BOTÓN DERECHO: PERFIL */}
           <BarButton onPress={handleOpenProfile}>
             <Ionicons name="person-circle-outline" size={26} color="#fff" />
           </BarButton>
@@ -544,6 +669,16 @@ export default function Home() {
           <Ionicons name="add" size={28} color="#fff" />
         </FabSquare>
       </BottomWrap>
+
+      {/* Overlay de recarga manual */}
+      {reloading && (
+        <FullScreenLoader>
+          <LoaderCard>
+            <ActivityIndicator size="large" color={BLUE} />
+            <LoaderText>Actualizando alarmas...</LoaderText>
+          </LoaderCard>
+        </FullScreenLoader>
+      )}
     </Screen>
   );
 }
@@ -568,12 +703,9 @@ const HeaderBar = styled.View({
   paddingBottom: 8,
 });
 
-const HeaderTitle = styled.Text({
-  fontSize: 28,
-  color: BLUE,
-  fontFamily: 'Oswald-Bold',
-  letterSpacing: 1,
-  textTransform: 'uppercase',
+const HeaderLeft = styled.View({
+  flexDirection: 'column',
+  paddingTop: 10,
 });
 
 const HeaderActions = styled.View({
@@ -584,12 +716,6 @@ const HeaderActions = styled.View({
 const IconBtn = styled.TouchableOpacity({
   padding: 6,
   borderRadius: 12,
-});
-
-const GreetingWrap = styled.View({
-  paddingTop: 8,
-  paddingBottom: 20,
-  paddingHorizontal: 4,
 });
 
 const GreetingHello = styled.Text({
@@ -652,4 +778,33 @@ const FabSquare = styled.TouchableOpacity({
   backgroundColor: BLUE,
   alignItems: 'center',
   justifyContent: 'center',
+});
+
+const FullScreenLoader = styled.View({
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0,0,0,0.25)',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 999,
+});
+
+const LoaderCard = styled.View({
+  backgroundColor: '#ffffffff',
+  paddingVertical: 18,
+  paddingHorizontal: 24,
+  borderRadius: 40,
+  alignItems: 'center',
+  justifyContent: 'center',
+  opacity: 0.9,
+});
+
+const LoaderText = styled.Text({
+  marginTop: 10,
+  color: '#3077beff',
+  fontSize: 14,
+  fontWeight: '700',
 });
