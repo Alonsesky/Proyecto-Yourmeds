@@ -1,5 +1,5 @@
-// components/profileUser.tsx
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -46,6 +46,8 @@ export default function ProfileUser({
   onLogoutPress,
   profile,
 }: Props) {
+  const router = useRouter();
+
   const [internalVisible, setInternalVisible] = useState(visible);
   const translateX = useRef(new Animated.Value(SCREEN_W)).current;
 
@@ -213,7 +215,10 @@ export default function ProfileUser({
       );
       setEmailValue(updated.email ?? emailValue.trim());
 
-      Alert.alert('Cambios guardados', 'Los datos de tu perfil se han actualizado.');
+      Alert.alert(
+        'Cambios guardados',
+        'Los datos de tu perfil se han actualizado.'
+      );
       setIsEditing(false);
     } catch (e: any) {
       console.error('Error al actualizar perfil:', e);
@@ -229,6 +234,13 @@ export default function ProfileUser({
   const handleLogout = () => {
     handleClosePanel();
     onLogoutPress();
+  };
+
+  const handleOpenHelp = () => {
+    // Cerramos el panel antes de navegar
+    setIsEditing(false);
+    onClose();
+    router.push('/help');
   };
 
   return (
@@ -362,13 +374,33 @@ export default function ProfileUser({
                 <BottomActions>
                   <LogoutDivider />
                   {!isEditing ? (
-                    <LogoutBtn onPress={handleLogout}>
-                      <Ionicons name="log-out-outline" size={22} color={BLUE} />
-                      <LogoutText>CERRAR SESIÓN</LogoutText>
-                    </LogoutBtn>
+                    <>
+                      {/* Botón de ayuda */}
+                      <LogoutBtn onPress={handleOpenHelp}>
+                        <Ionicons
+                          name="help-circle-outline"
+                          size={22}
+                          color={BLUE}
+                        />
+                        <LogoutText>CENTRO DE AYUDA</LogoutText>
+                      </LogoutBtn>
+
+                      {/* Botón de cerrar sesión */}
+                      <LogoutBtn onPress={handleLogout}>
+                        <Ionicons
+                          name="log-out-outline"
+                          size={22}
+                          color={BLUE}
+                        />
+                        <LogoutText>CERRAR SESIÓN</LogoutText>
+                      </LogoutBtn>
+                    </>
                   ) : (
                     <ActionsRow>
-                      <SecondaryBtn onPress={handleCancelEdit} disabled={saving}>
+                      <SecondaryBtn
+                        onPress={handleCancelEdit}
+                        disabled={saving}
+                      >
                         <SecondaryText>CANCELAR</SecondaryText>
                       </SecondaryBtn>
                       <PrimaryBtn onPress={handleSave} disabled={saving}>
@@ -473,7 +505,7 @@ const NameEditRow = styled.View({
   marginTop: 8,
   marginBottom: 20,
   alignSelf: 'center',
-  flexDirection: 'column',   // <--- antes era 'row'
+  flexDirection: 'column', // antes era 'row'
   gap: 8,
 });
 
@@ -538,6 +570,7 @@ const BottomActions = styled.View({
   paddingBottom: 24,
   alignItems: 'center',
   width: '100%',
+  gap: 8,
 });
 
 const LogoutDivider = styled.View({

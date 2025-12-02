@@ -95,6 +95,11 @@ public class GroupService {
         if (request.cant_users != null) group.setCantUsers(request.cant_users);
         if (request.is_private != null) group.setPrivate(request.is_private);
 
+        // Actualizar color
+        if (request.color != null) {
+            group.setColor(request.color.trim());
+        }
+
         group.setUpdatedAt(LocalDateTime.now());
         Group saved = groupRepository.save(group);
 
