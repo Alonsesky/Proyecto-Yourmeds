@@ -135,7 +135,7 @@ export const HELP_ITEMS: HelpItem[] = [
         image: require('../../assets/ImaAlarma/ua1.jpg'),
       },
       {
-        text: 'Rellenar los cambios a realizar y  presionar el botón "Confirmar".',
+        text: 'Rellenar los cambios a realizar y  presionar el botón "Guardar".',
         image: require('../../assets/ImaAlarma/ua2.jpg'),
       },
       {
