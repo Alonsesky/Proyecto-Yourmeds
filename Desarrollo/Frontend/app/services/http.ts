@@ -11,7 +11,7 @@ const PORT = 8080;
 // const FIXED_HOST = "192.168.0.15";
 // const FIXED_HOST = "20.xxx.xxx.xxx:8080";
 // const FIXED_HOST = "https://mi-backend-yourmeds.azurewebsites.net";
-const FIXED_HOST = "192.168.18.251";
+const FIXED_HOST = "192.168.18.15";
 
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
 // ---------------------------------------------
@@ -146,15 +146,9 @@ export async function http(path: string, options: Options = {}) {
     throw new HttpError(res.status, msg, body);
   }
 
-<<<<<<< HEAD
-  const ct = res.headers.get("content-type") || "";
-  return ct.includes("application/json") ? res.json() : res.text();
-}
-=======
   if (isJson) {
     return res.json();
   }
   return res.text();
 }
 
->>>>>>> origin
