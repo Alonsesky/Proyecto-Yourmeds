@@ -44,7 +44,7 @@ export const HELP_ITEMS: HelpItem[] = [
     summary: 'Te mostramos el flujo para eliminar un grupo desde la pantalla principal.',
     steps: [
       {
-        text: 'Desde la pantalla de inicio, presiona el botón con el símbolo "Basura", señalado con color rojo en imagen de referencia.',
+        text: 'Desde la pantalla de inicio, presiona el botón con el símbolo "Basura", señalado con color rojo en la imagen de referencia.',
         image: require('../../assets/ImaGrupo/dg1.jpg'),
       },
       {
@@ -62,7 +62,7 @@ export const HELP_ITEMS: HelpItem[] = [
     summary: 'Te mostramos el flujo para editar un grupo desde la pantalla principal.',
     steps: [
       {
-        text: 'Desde la pantalla de inicio, presiona el botón del grupo correspondiente en el signo "Editar", señalado con color rojo en imagen de referencia.',
+        text: 'Desde la pantalla de inicio, presiona el botón del grupo correspondiente en el signo "Editar", señalado con color rojo en la imagen de referencia.',
         image: require('../../assets/ImaGrupo/ug1.jpg'),
       },
       {
@@ -70,7 +70,7 @@ export const HELP_ITEMS: HelpItem[] = [
         image: require('../../assets/ImaGrupo/ug2.jpg'),
       },
       {
-        text: 'Pulsar "Guardar cambios" y los cambios se realizarán con exito.',
+        text: 'Pulsar "Guardar cambios" y los cambios se realizarán con éxito.',
         image: require('../../assets/ImaGrupo/ug3.jpg'),
       },
     ],
@@ -120,7 +120,7 @@ export const HELP_ITEMS: HelpItem[] = [
         image: require('../../assets/ImaAlarma/da2.jpg'),
       },
       {
-        text: 'Se realiza la eliminación y se visualiza los cambios.',
+        text: 'Se realiza la eliminación y se visualizan los cambios.',
         image: require('../../assets/ImaAlarma/da3.jpg'),
       },
     ],
@@ -139,7 +139,7 @@ export const HELP_ITEMS: HelpItem[] = [
         image: require('../../assets/ImaAlarma/ua2.jpg'),
       },
       {
-        text: 'Se visualiza los cambios correspondientes.',
+        text: 'Se visualizan los cambios correspondientes.',
         image: require('../../assets/ImaAlarma/ua3.jpg'),
       },
     ],
