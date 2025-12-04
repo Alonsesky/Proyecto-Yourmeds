@@ -1,22 +1,20 @@
 import { NativeModules, Platform } from "react-native";
 import { getToken } from "./storage";
 
-// ---------------------------------------------
-// Configuración base
-// ---------------------------------------------
+/* ---------------------------------------------
+ * Configuración base
+ * --------------------------------------------- */
 const PORT = 8080;
 
-// En release pon aquí tu backend real (LAN o Azure)
-// EJEMPLOS:
-// const FIXED_HOST = "192.168.0.15";
-// const FIXED_HOST = "20.xxx.xxx.xxx:8080";
-// const FIXED_HOST = "https://mi-backend-yourmeds.azurewebsites.net";
-const FIXED_HOST = "192.168.18.15";
+// En release pon aquí tu IP fija o dominio del backend
+const FIXED_HOST = "74.163.240.144";
 
+// Si usas variables EXPO_PUBLIC_API_BASE, se toma aquí
 const ENV_BASE = (process.env.EXPO_PUBLIC_API_BASE || "").trim();
-// ---------------------------------------------
-// Helpers
-// ---------------------------------------------
+
+/* ---------------------------------------------
+ * Helpers
+ * --------------------------------------------- */
 function normalizeHost(host: string) {
   // Android emulador especial
   if ((host === "localhost" || host === "127.0.0.1") && Platform.OS === "android") {
@@ -28,33 +26,33 @@ function normalizeHost(host: string) {
 function buildBase(hostOrUrl: string) {
   const trimmed = hostOrUrl.trim();
 
-  // Si ya viene con http/https, lo usamos tal cual
+  // 1) Si ya viene con http/https → se usa tal cual
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed.replace(/\/+$/, ""); // sin barra al final
   }
 
-  // Si viene en formato host:puerto, respetamos ese puerto
+  // 2) Si viene en formato host:puerto → respetamos ese puerto
   if (trimmed.includes(":")) {
     return `http://${trimmed}`;
   }
 
-  // Si es solo host, usamos PORT
+  // 3) Si es solo host, agregamos el PORT
   return `http://${trimmed}:${PORT}`;
 }
 
-// ---------------------------------------------
-// Descubrimiento automático de la IP
-// ---------------------------------------------
+/* ---------------------------------------------
+ * Descubrimiento automático de la IP
+ * --------------------------------------------- */
 function getAutoBase(): string {
-  // 0) Si definiste FIXED_HOST, úsalo SIEMPRE (debug y release)
+  // 0) Si definiste FIXED_HOST → úsalo SIEMPRE (release)
   if (FIXED_HOST.trim()) {
     return buildBase(FIXED_HOST);
   }
 
-  // 1) ENV_BASE (ideal para producción tipo EAS)
+  // 1) Si viene por ENV_BASE (EAS Production)
   if (ENV_BASE) return buildBase(ENV_BASE);
 
-  // 2) Solo usar scriptURL en modo desarrollo
+  // 2) Bundle script URL en modo desarrollo
   if (__DEV__) {
     try {
       const url: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
@@ -77,25 +75,32 @@ function getAutoBase(): string {
     // ignorar
   }
 
-  // 4) Fallback (pensado solo para desarrollo, emulador, etc.)
+  // 4) Fallback en dev/emulador
   const fallbackHost = Platform.OS === "ios" ? "localhost" : "10.0.2.2";
   return buildBase(fallbackHost);
 }
 
-// Base dinámica final
+/* ---------------------------------------------
+ * Base dinámica final
+ * --------------------------------------------- */
 const API_URL = getAutoBase();
 
-// ---------------------------------------------
-// HTTP Wrapper
-// ---------------------------------------------
-type Options = Omit<RequestInit, "headers"> & { headers?: Record<string, string> };
+// Log para debugging en Release
+console.log("[http] API_URL =", API_URL);
+
+/* ---------------------------------------------
+ * HTTP Wrapper
+ * --------------------------------------------- */
+type Options = Omit<RequestInit, "headers"> & {
+  headers?: Record<string, string>;
+};
 
 function isAuthPath(path: string) {
   const pathname = path.startsWith("http") ? new URL(path).pathname : path;
   return pathname.startsWith("/api/v1/auth/");
 }
 
-// Error HTTP tipado
+/* --------- Error HTTP tipado --------- */
 export class HttpError extends Error {
   status: number;
   body: any;
@@ -107,48 +112,55 @@ export class HttpError extends Error {
   }
 }
 
+/* ---------------------------------------------
+ * Función http principal
+ * --------------------------------------------- */
 export async function http(path: string, options: Options = {}) {
   const url = path.startsWith("http") ? path : `${API_URL}${path}`;
-  const stored = await getToken();
+  const storedToken = await getToken();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
 
-  // No enviar Authorization en llamadas a /auth/**
-  if (stored && !isAuthPath(path)) {
-    const hasBearer = /^Bearer\s+/i.test(stored);
-    headers.Authorization = hasBearer ? stored : `Bearer ${stored}`;
+  // Agregar Authorization automáticamente SI hay token y NO es ruta /auth/**
+  if (storedToken && !isAuthPath(path)) {
+    const alreadyHasBearer = /^Bearer\s+/i.test(storedToken);
+    headers.Authorization = alreadyHasBearer ? storedToken : `Bearer ${storedToken}`;
   }
 
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
 
   const ct = res.headers.get("content-type") || "";
   const isJson = ct.includes("application/json");
 
+  /* --------- Manejo de errores HTTP --------- */
   if (!res.ok) {
-    let body: any = null;
+    let errorBody: any = null;
 
     if (isJson) {
-      body = await res.json().catch(() => null);
+      errorBody = await res.json().catch(() => null);
     } else {
-      const text = await res.text().catch(() => "");
-      body = text;
+      errorBody = await res.text().catch(() => "");
     }
 
     const backendMsg =
-      body && typeof body === "object" && "message" in body
-        ? String((body as any).message)
+      errorBody && typeof errorBody === "object" && "message" in errorBody
+        ? String((errorBody as any).message)
         : "";
 
     const msg = backendMsg || `HTTP ${res.status}`;
-    throw new HttpError(res.status, msg, body);
+    throw new HttpError(res.status, msg, errorBody);
   }
 
+  /* --------- Respuesta exitosa --------- */
   if (isJson) {
     return res.json();
   }
+
   return res.text();
 }
-

@@ -1,14 +1,38 @@
+// app/services/auth.ts (o la ruta que uses)
 import { http } from "./http";
-import { clearSession, saveToken, saveUserId } from "./storage";
-import { fetchMyId } from "./user";
+import { clearSession } from "./storage";
 
 /* === ENDPOINTS === */
 const LOGIN_PATH = "/api/v1/auth/login";
 const REGISTER_PATH = "/api/v1/auth/register";
 
+/* === TIPOS DE RESPUESTA === */
+export type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+export type LoginResponse = {
+  token: string; // "Bearer eyJhbGciOiJIUzUxMiJ9..."
+  user: {
+    id: number;
+    email: string;
+    rut: string;
+    name: string;
+    lastName: string;
+    age: number;
+    roles: {
+      id: string;
+      name: string;
+      route: string;
+    }[];
+    notification_token: string | null;
+  };
+};
+
 /* === LOGIN === */
-export async function login(payload: { email: string; password: string }) {
-  // Limpia restos de sesiones anteriores
+export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  // Opcional pero útil: limpiar restos de sesión antes de un login nuevo
   await clearSession();
 
   const data = await http(LOGIN_PATH, {
@@ -16,20 +40,12 @@ export async function login(payload: { email: string; password: string }) {
     body: JSON.stringify(payload),
   });
 
-  const token =
-    (data as any).token ??
-    (data as any).access_token ??
-    (data as any).jwt;
-
-  if (!token) throw new Error("No se recibió token.");
-
-  await saveToken(String(token).trim());
-
-  // Obtener ID del usuario actual
-  const id = await fetchMyId();
-  await saveUserId(String(id));
-
-  return token;
+  // El backend devuelve exactamente:
+  // {
+  //   "token": "Bearer eyJh...",
+  //   "user": { ... }
+  // }
+  return data as LoginResponse;
 }
 
 /* === REGISTER === */

@@ -3,7 +3,7 @@
 // =======================
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useContext, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -26,11 +26,11 @@ import ProfileUser from '@/components/profileComponent/profileUser';
 import SesionCloseModal from '@/components/sesionClose/sesionClose';
 import AddChooser from '../../components/AddChoose';
 
+import { AuthContext } from '../context/AuthContext';
 import { scheduleAll } from '../notifications/scheduler';
 import { deleteAlarm, getAlarmsFromStorageOrApi } from '../services/alarm';
 import { deleteGroup, fetchMyGroupsAndAlarms, leaveGroup } from '../services/group';
 import {
-  clearToken,
   getGroupsSnapshot,
   saveGroupsSnapshot,
   saveUserId,
@@ -162,6 +162,7 @@ export default function Home() {
   const [showDebug, setShowDebug] = useState(false);
 
   const router = useRouter();
+  const { signOut } = useContext(AuthContext); // ⬅️ destructuramos signOut correctamente
   const [chooserOpen, setChooserOpen] = useState(false);
 
   // Estado de datos
@@ -257,12 +258,14 @@ export default function Home() {
   const handleCancelLogout = useCallback(() => setLogoutVisible(false), []);
   const handleConfirmLogout = useCallback(async () => {
     try {
-      await clearToken();
-      router.replace('/(auth)/login');
+      await signOut();
+    } catch (e) {
+      console.warn('[Home] Error al cerrar sesión', e);
     } finally {
       setLogoutVisible(false);
+      router.replace('/(auth)/login');
     }
-  }, [router]);
+  }, [router, signOut]);
 
   // Refs para control de efectos
   const fetchingRef = useRef(false);
@@ -309,19 +312,26 @@ export default function Home() {
       const status = err?.status ?? err?.response?.status;
       if (status === 401) {
         Alert.alert('Sesión expirada', 'Vuelve a iniciar sesión.');
-        await clearToken();
-        router.replace('/(auth)/login');
+        try {
+          await signOut();
+        } catch (e) {
+          console.warn('[Home] Error al hacer signOut tras 401', e);
+        } finally {
+          router.replace('/(auth)/login');
+        }
       } else {
         Alert.alert('Error', 'No fue posible cargar tus grupos.');
       }
     } finally {
       fetchingRef.current = false;
     }
-  }, [router]);
+  }, [router, signOut]);
 
   // 3) Enfocar Home
   useFocusEffect(
     useCallback(() => {
+      mountedRef.current = true;
+
       async function load() {
         try {
           const id = await fetchMyId();
@@ -346,6 +356,10 @@ export default function Home() {
         }
       }
       load();
+
+      return () => {
+        mountedRef.current = false;
+      };
     }, [])
   );
 
