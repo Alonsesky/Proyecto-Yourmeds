@@ -1,4 +1,5 @@
 // services/user.ts
+import { router } from 'expo-router';
 import { http } from './http';
 
 // Tipo de perfil que usaremos en Home y ProfileUser
@@ -86,6 +87,8 @@ export async function updateMyProfile(payload: {
     body: JSON.stringify(payload),
   });
 
+  // Recargar Home
+  router.replace('/(app)/home');
   const anyData = data as any;
 
   const rawName =
