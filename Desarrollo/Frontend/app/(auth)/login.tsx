@@ -140,10 +140,6 @@ export default function LoginScreen() {
         <TextoBoton>{loadingLogin ? 'Ingresando…' : 'Ingresar'}</TextoBoton>
       </Boton>
 
-      <Row>
-        <TextoLinkSm>Contraseña Olvidada</TextoLinkSm>
-      </Row>
-
       <TextLink>¿No tienes Cuenta?</TextLink>
       <Boton onPress={() => regRef.current?.open()}>
         <TextoBoton>Registrarse</TextoBoton>
